@@ -1,0 +1,126 @@
+version: "0.1.2"
+semantic_model:
+  - name: sap_p2p_min
+    description: SAP P2P（精简示例：PR/PO/供应商 + 缺料预警动作）
+    ai_context:
+      instructions: "涉及付款/过账建议必须先检查三单匹配异常与供应商阻断状态。"
+      examples:
+        - "有哪些物料将缺失？"
+        - "给我一套交期优先的请购方案。"
+        - "给我一套价格优先的请购方案。"
+    datasets:
+      - name: suppliers
+        source: sap.p2p.suppliers
+        primary_key: [supplier_id]
+        fields:
+          - name: supplier_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: suppliers.supplier_id
+          - name: status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: suppliers.status
+      - name: materials
+        source: sap.p2p.materials
+        primary_key: [material_id]
+        fields:
+          - name: material_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: materials.material_id
+          - name: material_number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: materials.material_number
+      - name: purchase_requisitions
+        source: sap.p2p.purchase_requisitions
+        primary_key: [purchase_requisition_id]
+        fields:
+          - name: purchase_requisition_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: purchase_requisitions.purchase_requisition_id
+          - name: supplier_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: purchase_requisitions.supplier_id
+      - name: purchase_requisition_items
+        source: sap.p2p.purchase_requisition_items
+        primary_key: [purchase_requisition_item_id]
+        fields:
+          - name: purchase_requisition_item_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: purchase_requisition_items.purchase_requisition_item_id
+          - name: purchase_requisition_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: purchase_requisition_items.purchase_requisition_id
+          - name: material_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: purchase_requisition_items.material_id
+          - name: required_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: purchase_requisition_items.required_date
+            dimension:
+              is_time: true
+    relationships:
+      - name: pr_items_to_pr_header
+        from: purchase_requisition_items
+        to: purchase_requisitions
+        from_columns: [purchase_requisition_id]
+        to_columns: [purchase_requisition_id]
+      - name: pr_to_suppliers
+        from: purchase_requisitions
+        to: suppliers
+        from_columns: [supplier_id]
+        to_columns: [supplier_id]
+    metrics:
+      - name: pr_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT purchase_requisitions.purchase_requisition_id)
+        description: 请购单数量
+    behavior:
+      namespace: "SAP_P2P"
+      behavior_layer_version: "0.1"
+      actions:
+        - id: pr/generate_two_plans
+          title: 生成两套请购方案（交期优先/价格优先）
+          kind: query
+          operation: recommend
+          entity_name: purchase_requisitions
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required: [material_id, required_date]
+              properties:
+                material_id: { type: string }
+                required_date: { type: string }
+            output_schema:
+              type: object
+              additionalProperties: true
+      rules:
+        - id: sap_p2p/rule_blocked_supplier_guard
+          title: 阻断供应商拦截
+          severity: warn
+          when: { entity: dataset }
+          constraint: { type: security }
+          message: "供应商状态为 Blocked 时，不应被推荐为可下单对象。"
+          remediation: "先解冻供应商或选择其他供应商。"
+

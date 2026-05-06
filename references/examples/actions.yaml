@@ -1,0 +1,313 @@
+# OSI Behavior Layer v0.2 — Action Types 示例
+
+> 配套规范：[../behavior-layer.md](../behavior-layer.md) | [../behavior-layer.schema.json](../behavior-layer.schema.json)
+
+---
+
+## 1. Command 类型（写操作）
+
+### 1.1 创建采购申请 — `pr/create`
+
+```yaml
+- id: "pr/create"
+  name: "创建采购申请"
+  description: "业务人员提交新的采购申请单，包含物料明细与期望价格"
+  kind: "command"
+  entity_name: "purchase_requisitions"
+  io_schema:
+    input_schema:
+      type: "object"
+      required: ["requester_id", "items"]
+      properties:
+        requester_id: { type: "string", description: "申请人ID" }
+        department: { type: "string", description: "需求部门" }
+        items:
+          type: "array"
+          items:
+            type: "object"
+            required: ["material_id", "quantity"]
+            properties:
+              material_id: { type: "string" }
+              quantity: { type: "number" }
+              expected_price: { type: "number" }
+        emergency_flag: { type: "boolean", default: false }
+        notes: { type: "string" }
+    output_schema:
+      type: "object"
+      properties:
+        pr_id: { type: "string" }
+        status: { type: "string" }
+        created_at: { type: "string", format: "date-time" }
+  effects:
+    - entity: "dataset"
+      mode: "write"
+      impact_type: "create_row"
+      selectors:
+        dataset: "purchase_requisitions"
+    - entity: "dataset"
+      mode: "write"
+      impact_type: "state_transition"
+      selectors:
+        dataset: "purchase_requisitions"
+      set_value: "DRAFT"
+  ai_context:
+    - "我要申请采购"
+    - "帮我新建一个采购单"
+    - "提交采购需求"
+    - "add a new purchase requisition"
+  tool_hint:
+    tool_name: "dtp_create_pr"
+    dialect: "ANSI_SQL"
+  label: ["procurement", "draft", "create"]
+  synonyms: ["新建采购申请", "发起采购", "录入采购单"]
+  version: "1.0.0"
+```
+
+### 1.2 审批采购申请 — `pr/approve`
+
+```yaml
+- id: "pr/approve"
+  name: "审批采购申请"
+  description: "审批人对草稿状态的采购申请进行批准或驳回"
+  kind: "command"
+  entity_name: "purchase_requisitions"
+  io_schema:
+    input_schema:
+      type: "object"
+      required: ["pr_id", "decision"]
+      properties:
+        pr_id: { type: "string", description: "采购申请ID" }
+        decision: { type: "string", enum: ["APPROVED", "REJECTED"] }
+        comment: { type: "string", description: "审批意见" }
+        approver_id: { type: "string" }
+    output_schema:
+      type: "object"
+      properties:
+        pr_id: { type: "string" }
+        status: { type: "string" }
+        approved_at: { type: "string", format: "date-time" }
+  effects:
+    - entity: "dataset"
+      mode: "write"
+      impact_type: "state_transition"
+      selectors:
+        dataset: "purchase_requisitions"
+      set_value: "APPROVED"
+    - entity: "field"
+      mode: "write"
+      impact_type: "update_row"
+      selectors:
+        dataset: "purchase_requisitions"
+        field_names: ["status", "approved_by", "approved_at", "approval_comment"]
+  ai_context:
+    - "批准这个采购单"
+    - "审核通过"
+    - "approve this PR"
+    - "同意采购申请"
+  label: ["procurement", "approval", "workflow"]
+  synonyms: ["审核通过", "批准申请", "通过审批"]
+  version: "1.0.0"
+```
+
+### 1.3 下达采购订单 — `po/release`
+
+```yaml
+- id: "po/release"
+  name: "下达采购订单"
+  description: "将已批准的采购申请转换为正式采购订单并下达给供应商"
+  kind: "command"
+  entity_name: "purchase_orders"
+  io_schema:
+    input_schema:
+      type: "object"
+      required: ["pr_id", "vendor_id"]
+      properties:
+        pr_id: { type: "string", description: "采购申请ID" }
+        vendor_id: { type: "string", description: "供应商ID" }
+        delivery_date: { type: "string", format: "date" }
+        payment_terms: { type: "string", enum: ["T/T", "L/C", "OA"] }
+    output_schema:
+      type: "object"
+      properties:
+        po_id: { type: "string" }
+        status: { type: "string" }
+        released_at: { type: "string", format: "date-time" }
+  effects:
+    - entity: "dataset"
+      mode: "write"
+      impact_type: "create_row"
+      selectors:
+        dataset: "purchase_orders"
+    - entity: "dataset"
+      mode: "write"
+      impact_type: "state_transition"
+      selectors:
+        dataset: "purchase_requisitions"
+      set_value: "CONVERTED_TO_PO"
+  ai_context:
+    - "下达订单"
+    - "转成采购单"
+    - "release purchase order"
+    - "向供应商下单"
+  label: ["procurement", "po", "release"]
+  synonyms: ["转PO", "生成订单", "正式下单"]
+  version: "1.0.0"
+```
+
+---
+
+## 2. Query 类型（读操作）
+
+### 2.1 查询采购申请详情 — `pr/read`
+
+```yaml
+- id: "pr/read"
+  name: "查询采购申请详情"
+  description: "按采购申请ID获取完整详情，包含明细行与审批历史"
+  kind: "query"
+  entity_name: "purchase_requisitions"
+  io_schema:
+    input_schema:
+      type: "object"
+      required: ["pr_id"]
+      properties:
+        pr_id: { type: "string" }
+        include_history: { type: "boolean", default: false }
+    output_schema:
+      type: "object"
+      properties:
+        pr_id: { type: "string" }
+        status: { type: "string" }
+        requester: { type: "object" }
+        items: { type: "array" }
+        total_amount: { type: "number" }
+        history: { type: "array" }
+  ai_context:
+    - "查看采购申请详情"
+    - "这个PR的内容是什么"
+    - "show me the PR details"
+  label: ["procurement", "read", "detail"]
+  synonyms: ["获取PR详情", "查看申请内容"]
+  version: "1.0.0"
+```
+
+### 2.2 检索采购申请列表 — `pr/search`
+
+```yaml
+- id: "pr/search"
+  name: "检索采购申请"
+  description: "按多维度条件检索采购申请列表"
+  kind: "query"
+  entity_name: "purchase_requisitions"
+  io_schema:
+    input_schema:
+      type: "object"
+      properties:
+        status: { type: "array", items: { type: "string" } }
+        department: { type: "string" }
+        requester_id: { type: "string" }
+        date_from: { type: "string", format: "date" }
+        date_to: { type: "string", format: "date" }
+        emergency_flag: { type: "boolean" }
+        keyword: { type: "string" }
+        page: { type: "integer", default: 1 }
+        page_size: { type: "integer", default: 20, maximum: 100 }
+    output_schema:
+      type: "object"
+      properties:
+        items: { type: "array" }
+        total: { type: "integer" }
+        page: { type: "integer" }
+        page_size: { type: "integer" }
+  ai_context:
+    - "查一下采购申请"
+    - "有哪些待审批的PR"
+    - "search purchase requisitions"
+    - "找找近期的采购申请"
+  label: ["procurement", "search", "list"]
+  synonyms: ["搜索采购申请", "查找PR"]
+  version: "1.0.0"
+```
+
+### 2.3 统计采购金额 — `pr/derive`
+
+```yaml
+- id: "pr/derive"
+  name: "统计采购申请金额"
+  description: "按维度聚合统计采购申请金额，支持按部门/时间/状态等维度"
+  kind: "query"
+  entity_name: "purchase_requisitions"
+  io_schema:
+    input_schema:
+      type: "object"
+      properties:
+        group_by: { type: "array", items: { type: "string" }, enum: ["department", "status", "requester", "month"] }
+        date_from: { type: "string", format: "date" }
+        date_to: { type: "string", format: "date" }
+        status_filter: { type: "array", items: { type: "string" } }
+    output_schema:
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          dimension: { type: "string" }
+          total_count: { type: "integer" }
+          total_amount: { type: "number" }
+  effects:
+    - entity: "dataset"
+      mode: "derive"
+      impact_type: "aggregate"
+      selectors:
+        dataset: "purchase_requisitions"
+        field_names: ["amount"]
+  ai_context:
+    - "统计本月采购金额"
+    - "各部门花了多少钱"
+    - "calculate total procurement amount"
+    - "采购汇总报表"
+  label: ["procurement", "analytics", "aggregate"]
+  synonyms: ["采购汇总", "金额统计", "聚合分析"]
+  version: "1.0.0"
+```
+
+---
+
+## 3. Batch 操作（批量写）
+
+### 3.1 批量审批 — `pr/batch_approve`
+
+```yaml
+- id: "pr/batch_approve"
+  name: "批量审批采购申请"
+  description: "对多个采购申请进行批量审批操作"
+  kind: "command"
+  entity_name: "purchase_requisitions"
+  io_schema:
+    input_schema:
+      type: "object"
+      required: ["pr_ids", "decision"]
+      properties:
+        pr_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 }
+        decision: { type: "string", enum: ["APPROVED", "REJECTED"] }
+        comment: { type: "string" }
+        approver_id: { type: "string" }
+    output_schema:
+      type: "object"
+      properties:
+        success_count: { type: "integer" }
+        failed_count: { type: "integer" }
+        results: { type: "array" }
+  effects:
+    - entity: "dataset"
+      mode: "write"
+      impact_type: "state_transition"
+      selectors:
+        dataset: "purchase_requisitions"
+  ai_context:
+    - "批量审批这些PR"
+    - "一次性通过多个申请"
+    - "batch approve PRs"
+  label: ["procurement", "batch", "approval"]
+  synonyms: ["批量审核", "多选审批"]
+  version: "1.0.0"
+```

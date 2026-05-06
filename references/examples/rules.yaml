@@ -1,0 +1,387 @@
+# OSI Behavior Layer v0.2 — Rules 示例
+
+> 配套规范：[../behavior-layer.md](../behavior-layer.md) | [../behavior-layer.schema.json](../behavior-layer.schema.json)
+
+---
+
+## 1. 合规性约束（compliance）
+
+### 1.1 无申请不下单
+
+```yaml
+- id: "dtp/rule_no_po_without_approved_pr"
+  name: "无申请不下单"
+  description: "采购订单必须关联已批准的采购申请，确保端到端可追溯"
+  severity: "error"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "po/release"
+  constraint:
+    type: "compliance"
+    requires:
+      - "purchase_orders.pr_id IS NOT NULL"
+      - "purchase_requisitions.status = 'APPROVED'"
+  ai_context:
+    - "采购订单必须关联已审批通过的采购申请，禁止无申请直接下单"
+    - "未找到关联的已审批采购申请"
+    - "Order must be linked to an approved PR"
+  references:
+    - { title: "采购管理制度", url: "/docs/procurement-policy" }
+    - { title: "端到端流程说明", url: "/docs/pr-to-po-flow" }
+  label: ["procurement", "compliance", "pr-po-linkage"]
+```
+
+### 1.2 紧急采购必须附说明
+
+```yaml
+- id: "dtp/rule_emergency_requires_note"
+  name: "紧急采购必须附说明"
+  description: "标记为紧急的采购申请必须填写紧急原因说明"
+  severity: "error"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "pr/create"
+  if:
+    all_of:
+      - { field: "purchase_requisitions.emergency_flag", equals: true }
+  constraint:
+    type: "compliance"
+    requires:
+      - "purchase_requisitions.notes IS NOT NULL"
+      - "LENGTH(purchase_requisitions.notes) >= 10"
+  ai_context:
+    - "紧急采购必须填写原因说明，紧急原因不能为空或过短"
+    - "请填写紧急采购的具体原因"
+    - "Emergency procurement requires a detailed note"
+  references:
+    - { title: "紧急采购流程", url: "/docs/emergency-procurement" }
+  label: ["procurement", "emergency", "compliance"]
+```
+
+---
+
+## 2. 治理约束（governance）
+
+### 2.1 金额超限需二级审批
+
+```yaml
+- id: "dtp/rule_high_value_requires_second_approval"
+  name: "金额超限需二级审批"
+  description: "超过预算阈值的采购申请需要二级审批才能下达订单"
+  severity: "warn"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "po/release"
+  if:
+    any_of:
+      - { field: "purchase_orders.amount", gt: 50000 }
+      - { field: "purchase_orders.amount", gt: "{user.department_budget_limit}" }
+  constraint:
+    type: "governance"
+    recommendation: "建议金额超过5万元的采购申请增加财务总监二级审批"
+    requires:
+      - "purchase_orders.approval_level >= 2"
+  ai_context:
+    - "该订单金额较大，系统建议进行二级审批以加强内部控制"
+    - "高金额订单需要二级审批"
+    - "High-value order requires second-level approval"
+  references:
+    - { title: "预算审批权限表", url: "/docs/approval-matrix" }
+  label: ["procurement", "governance", "high-value", "segregation-of-duties"]
+```
+
+### 2.2 供应商必须已准入
+
+```yaml
+- id: "dtp/rule_vendor_must_be_approved"
+  name: "供应商必须已准入"
+  description: "只有状态为ACTIVE的供应商才能参与采购"
+  severity: "error"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "po/release"
+  constraint:
+    type: "governance"
+    requires:
+      - "vendors.status = 'ACTIVE'"
+      - "vendors.approval_date IS NOT NULL"
+  ai_context:
+    - "该供应商尚未完成准入审批或已被禁用，无法向其下达订单"
+    - "供应商状态不可用"
+    - "Vendor is not approved or has been disabled"
+  references:
+    - { title: "供应商管理流程", url: "/docs/vendor-management" }
+  label: ["procurement", "vendor", "governance"]
+```
+
+---
+
+## 3. 风险控制（risk）
+
+### 3.1 价格超市场价预警
+
+```yaml
+- id: "dtp/rule_price_exceeds_market"
+  name: "价格超市场价预警"
+  description: "采购单价超过系统参考价一定比例时触发预警"
+  severity: "warn"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "pr/create"
+  constraint:
+    type: "risk"
+    recommendation: "采购价格超过市场参考价20%，建议重新询价"
+    requires:
+      - "purchase_requisition_items.unit_price <= market_reference_price * 1.2"
+  ai_context:
+    - "该物料的采购价格显著高于市场参考价，请确认是否需要重新询价"
+    - "价格偏离市场价20%以上"
+    - "Price exceeds market reference by more than 20%"
+  references:
+    - { title: "价格审计政策", url: "/docs/price-audit" }
+  label: ["procurement", "price", "risk", "market-comparison"]
+```
+
+### 3.2 单一供应商依赖预警
+
+```yaml
+- id: "dtp/rule_single_vendor_dependency"
+  name: "单一供应商依赖预警"
+  description: "某类物料近半年单一供应商采购占比超过80%时预警"
+  severity: "warn"
+  when:
+    entity: "dataset"
+    selectors:
+      dataset: "purchase_orders"
+  constraint:
+    type: "risk"
+    recommendation: "该物料类别对单一供应商依赖度过高，建议发展备选供应商"
+  ai_context:
+    - "近半年该物料类别80%以上采购来自同一供应商，存在供应链风险"
+    - "单一供应商依赖度过高"
+    - "High dependency on single vendor detected"
+  label: ["procurement", "supply-chain", "risk", "diversification"]
+```
+
+---
+
+## 4. 业务策略（policy）
+
+### 4.1 利库优先策略
+
+```yaml
+- id: "dtp/rule_prefer_stock_first"
+  name: "利库优先策略"
+  description: "采购申请时系统应优先推荐现有库存，而非直接采购"
+  severity: "info"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "pr/create"
+  constraint:
+    type: "policy"
+    recommendation: "建议先查询现有库存，确认无合适库存后再创建采购申请"
+  ai_context:
+    - "系统检测到库存中存在相同或可替代物料，建议优先利库"
+    - "库存中有可用物料"
+    - "Stock availability detected, consider using existing inventory first"
+  references:
+    - { title: "库存管理政策", url: "/docs/inventory-policy" }
+  label: ["procurement", "policy", "stock-first"]
+```
+
+---
+
+## 5. 内部控制（control）
+
+### 5.1 收货超允差控制
+
+```yaml
+- id: "dtp/rule_receiving_over_tolerance"
+  name: "收货超允差控制"
+  description: "实际收货数量超过订单数量+允差比例时需特批"
+  severity: "error"
+  when:
+    entity: "action"
+    applies_to:
+      action_id: "gr/post"
+  constraint:
+    type: "control"
+    requires:
+      - "goods_receipts.quantity <= purchase_order_items.quantity * (1 + tolerance_percentage)"
+  ai_context:
+    - "收货数量超过订单允许的允差范围，需要特批才能过账"
+    - "超出允差范围"
+    - "Quantity exceeds tolerance limit"
+  references:
+    - { title: "收货允差标准", url: "/docs/receiving-tolerance" }
+  label: ["procurement", "control", "receiving", "tolerance"]
+```
+
+### 5.2 金额超额控制
+
+```yaml
+- id: "dtp/rule_amount_exceeds_po"
+  name: "到票金额超额控制"
+  description: "到票金额（含税）不能超过采购订单金额的105%"
+  severity: "error"
+  when:
+    entity: "dataset"
+    selectors:
+      dataset: "goods_receipts"
+      field_names: ["invoice_amount"]
+  constraint:
+    type: "control"
+    requires:
+      - "goods_receipts.invoice_amount_tax_included <= purchase_orders.total_amount * 1.05"
+    refers_to: "purchase_orders.total_amount"
+  ai_context:
+    - "到票金额超过订单金额105%的上限，不允许过账"
+    - "发票金额超出允许范围"
+    - "Invoice amount exceeds PO limit by more than 5%"
+  label: ["procurement", "control", "invoice", "amount-limit"]
+```
+
+---
+
+## 6. 命名规范（naming）
+
+### 6.1 申请人ID格式规范
+
+```yaml
+- id: "dtp/rule_requester_id_format"
+  name: "申请人ID格式规范"
+  description: "申请人ID必须符合企业工号格式"
+  severity: "error"
+  when:
+    entity: "field"
+    selectors:
+      dataset: "purchase_requisitions"
+      field_names: ["requester_id"]
+  constraint:
+    type: "naming"
+    pattern: "^[A-Z]{2}\\d{6}$"
+    description: "工号格式：2个大写字母 + 6位数字，如"EMP001234""
+  ai_context:
+    - "申请人ID格式不正确，应为2位大写字母+6位数字"
+    - "员工编号格式错误"
+    - "Employee ID format is incorrect"
+  label: ["procurement", "naming", "format", "employee-id"]
+```
+
+---
+
+## 7. 质量要求（quality）
+
+### 7.1 采购申请行项目必填校验
+
+```yaml
+- id: "dtp/rule_pr_item_required_fields"
+  name: "采购申请行项目必填校验"
+  description: "采购申请行项目物料、数量、期望价格必填"
+  severity: "error"
+  when:
+    entity: "field"
+    selectors:
+      dataset: "purchase_requisition_items"
+      field_names: ["material_id", "quantity", "expected_price"]
+  constraint:
+    type: "quality"
+    requires:
+      - "purchase_requisition_items.material_id IS NOT NULL"
+      - "purchase_requisition_items.quantity > 0"
+      - "purchase_requisition_items.expected_price > 0"
+  ai_context:
+    - "采购申请明细行缺少必填字段，无法提交"
+    - "物料编码、数量或期望价格不能为空"
+    - "Required fields are missing in line item"
+  label: ["procurement", "quality", "required-fields"]
+```
+
+---
+
+## 8. 安全约束（security）
+
+### 8.1 供应商银行信息脱敏
+
+```yaml
+- id: "dtp/rule_vendor_bank_info_protected"
+  name: "供应商银行信息保护"
+  description: "供应商银行账户信息为敏感字段，仅财务角色可见"
+  severity: "error"
+  when:
+    entity: "dataset"
+    selectors:
+      dataset: "vendors"
+      field_names: ["bank_account", "bank_routing_number"]
+  constraint:
+    type: "security"
+    forbidden:
+      - "SELECT bank_account WHERE user_role != 'FINANCE'"
+  ai_context:
+    - "该字段为敏感信息，您的角色无权限访问"
+    - "银行账户信息仅财务人员可见"
+    - "This field is restricted to Finance role only"
+  label: ["security", "pii", "finance-data"]
+```
+
+---
+
+## 9. 过滤约束（filter）
+
+### 9.1 仅统计已审批数据
+
+```yaml
+- id: "dtp/rule_report_only_approved"
+  name: "报表仅包含已审批数据"
+  description: "采购相关报表默认仅统计状态为已审批的数据"
+  severity: "info"
+  when:
+    entity: "metric"
+    selectors:
+      metric_names: ["pr_total_amount", "po_total_amount", "delivery_on_time_rate"]
+  constraint:
+    type: "filter"
+    recommendation: "默认过滤条件：仅统计 status = 'APPROVED' 的记录"
+  ai_context:
+    - "报表默认过滤条件：仅统计已审批通过的采购申请和订单"
+    - "默认仅显示已审批数据"
+    - "Reports filter to show only approved records by default"
+  label: ["procurement", "filter", "report", "default-condition"]
+```
+
+---
+
+## 10. 表达式约束（expression）
+
+### 10.1 禁止在明细行使用聚合函数
+
+```yaml
+- id: "dtp/rule_no_aggregate_in_line_items"
+  name: "明细行禁止聚合"
+  description: "采购申请明细行不允许出现聚合函数"
+  severity: "error"
+  when:
+    entity: "field"
+    selectors:
+      dataset: "purchase_requisition_items"
+      field_names: ["quantity", "expected_price"]
+  constraint:
+    type: "expression"
+    forbidden:
+      - "SUM(quantity)"
+      - "AVG(quantity)"
+      - "COUNT(*)"
+      - "MAX(quantity)"
+      - "MIN(quantity)"
+  ai_context:
+    - "明细行字段不允许使用聚合函数，请使用明细数值"
+    - "不允许在明细行使用聚合"
+    - "Aggregate functions are not allowed in line items"
+  label: ["procurement", "expression", "validation"]
+```

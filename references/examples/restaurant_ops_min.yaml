@@ -1,0 +1,100 @@
+version: "0.1.2"
+semantic_model:
+  - name: restaurant_ops_min
+    description: 餐饮经营分析（精简示例：订单/明细/库存临期）
+    ai_context:
+      instructions: "默认口径:营收与销量只统计已支付(orders.order_status='PAID')的订单"
+      examples:
+        - "本月营收是多少？"
+        - "临期库存最多的原料有哪些？"
+    datasets:
+      - name: orders
+        source: restaurant.public.orders
+        primary_key: [order_id]
+        fields:
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.order_id
+          - name: order_status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.order_status
+          - name: total_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.total_amount
+      - name: order_items
+        source: restaurant.public.order_items
+        primary_key: [order_item_id]
+        fields:
+          - name: order_item_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.order_item_id
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.order_id
+          - name: quantity
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.quantity
+      - name: inventory_lot_balances
+        source: restaurant.public.inventory_lot_balances
+        primary_key: [lot_balance_id]
+        fields:
+          - name: lot_balance_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.lot_balance_id
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.ingredient_id
+          - name: expiry_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.expiry_date
+            dimension:
+              is_time: true
+          - name: on_hand_qty
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.on_hand_qty
+    relationships:
+      - name: order_items_to_orders
+        from: order_items
+        to: orders
+        from_columns: [order_id]
+        to_columns: [order_id]
+    metrics:
+      - name: gross_revenue
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN orders.total_amount ELSE 0 END)
+        description: 营收（默认：已支付订单 total_amount 之和）
+      - name: dish_units_sold
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN order_items.quantity ELSE 0 END)
+        description: 菜品销量（默认：已支付订单明细 quantity 之和）
+      - name: expiring_lot_on_hand_qty
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(inventory_lot_balances.on_hand_qty)
+        description: 临期批次现存量（临期阈值由查询指定）
+

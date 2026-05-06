@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "prompt": "请根据以下业务：餐饮临期运营。事实表 order_items（order_item_id, order_id, dish_id, quantity, served_time），订单表 orders（order_id, store_id, customer_id, order_status, order_time, paid_time, total_amount），库存批次余额 inventory_lot_balances（lot_balance_id, ingredient_id, expiry_date, on_hand_qty）。默认口径：营收/销量只统计已支付（order_status='PAID'）。请输出一份 OSI YAML（version=0.1.2）包含 datasets/relationships/metrics，并在最后执行 validate.py 验证，给出通过的摘要。",
+    "expected": "生成可验证的 OSI YAML；包含 order_items→orders 的 relationship；metrics 至少含 gross_revenue/dish_units_sold/expiring_lot_on_hand_qty；最后输出 validate.py 通过摘要。"
+  },
+  {
+    "id": 2,
+    "prompt": "我在做 P2P 缺料预警：需要在 PR 物料将缺失时，生成两套请购建议（交期优先/价格优先）。请在 OSI 模型中补齐行为层：定义一个 query 类型 action（pr/generate_two_plans），并用 rules 表达“Blocked 供应商不可被推荐”。最后必须跑 validate.py。",
+    "expected": "OSI YAML 包含 behavior.actions + behavior.rules；action 有 input_schema；rule severity/when/constraint/message/remediation 齐全；validate.py 通过。"
+  },
+  {
+    "id": 3,
+    "prompt": "请把下面这个‘用例闭环’映射成 OSI：监控 KPI 异常→自动生成待办任务→分派给责任人→执行动作→记录效果→回写到规则/阈值。要求：给出一个 OSI 行为层蓝图（actions+effects+rules），并说明哪些部分属于 datasets/metrics，哪些属于 behavior。最后跑 validate.py。",
+    "expected": "输出一套 Palantir 风格闭环在 OSI 中的映射：signals→metrics；investigate/assign/execute/measure→actions；可追溯的变更→effects；门禁/策略→rules；并给出可通过 validate.py 的最小 YAML。"
+  },
+  {
+    "id": 4,
+    "prompt": "请基于我给的业务对象与关系生成一份 OSI YAML（v0.1.2），并在 validate.py 通过后，额外生成一个单页 HTML（浅蓝商务风格）用于 D3 图谱展示该 OSI 模型结构（datasets/relationships + metrics/actions/rules）。",
+    "expected": "交付两个文件：1) OSI YAML；2) viewer.html（可离线打开、可导入该 YAML、图谱可交互，节点可显示中文别名）。"
+  }
+]

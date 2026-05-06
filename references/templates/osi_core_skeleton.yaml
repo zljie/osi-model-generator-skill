@@ -1,0 +1,19 @@
+# OSI Core 最小骨架（可复制后填充）
+version: "0.1.2"
+
+semantic_model:
+  - name: <model_name>
+    description: <一句话描述>
+    ai_context:
+      instructions: <默认口径/限制>
+      synonyms: []
+      examples: []
+    datasets: []
+    relationships: []
+    metrics: []
+    # behavior:
+    #   namespace: "<NAMESPACE>"
+    #   behavior_layer_version: "0.1"
+    #   actions: []
+    #   rules: []
+
