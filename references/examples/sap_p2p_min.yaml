@@ -100,7 +100,7 @@ semantic_model:
       behavior_layer_version: "0.1"
       actions:
         - id: pr/generate_two_plans
-          title: 生成两套请购方案（交期优先/价格优先）
+          name: 生成两套请购方案（交期优先/价格优先）
           kind: query
           operation: recommend
           entity_name: purchase_requisitions
@@ -117,7 +117,7 @@ semantic_model:
               additionalProperties: true
       rules:
         - id: sap_p2p/rule_blocked_supplier_guard
-          title: 阻断供应商拦截
+          name: 阻断供应商拦截
           severity: warn
           when: { entity: dataset }
           constraint: { type: security }

@@ -399,7 +399,7 @@ Actions represent executable intents (API calls, workflows, tools). This spec in
 | Field      | Type   | Required | Description |
 |-----------|--------|----------|-------------|
 | `id`      | string | Yes      | Action id, e.g. `suppliers/block` |
-| `title`   | string | Yes      | Human-friendly title |
+| `name`    | string | Yes      | Human-friendly name |
 | `kind`    | string | No       | `command` or `query` |
 | `operation` | string | No     | Free-form operation name (e.g. `block`, `unblock`, `analyze`) |
 | `labels`  | string[] | No     | Tags/labels for categorization |
@@ -415,7 +415,7 @@ semantic_model:
       behavior_layer_version: "0.1"
       actions:
         - id: suppliers/block
-          title: 阻断供应商
+          name: 阻断供应商
           kind: command
           operation: block
           entity_name: suppliers

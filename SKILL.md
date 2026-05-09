@@ -263,7 +263,7 @@ behavior:
   behavior_layer_version: "0.1"
   actions:
     - id: suppliers/block
-      title: 冻结/阻断供应商
+      name: 冻结/阻断供应商
       kind: command
       operation: block
       entity_name: suppliers
@@ -278,7 +278,7 @@ behavior:
       labels: [governance, vendor_management]
   rules:
     - id: sap_p2p/rule_blocked_vendor_transaction_prevention
-      title: 阻断供应商交易拦截策略
+      name: 阻断供应商交易拦截策略
       severity: warn
       when: { entity: dataset }
       constraint: { type: security }
@@ -290,8 +290,9 @@ behavior:
 - `behavior.namespace`、`behavior.behavior_layer_version`、`behavior.actions`、`behavior.rules` 都必填（`actions`/`rules` 均允许空数组）
 - ⚠️ 旧别名 `action_types` 已从 schema 中移除，不再被识别；老模型需重命名为 `actions`
 - ⚠️ action 内的 `effects` / `tool_hint` / `idempotency` 已移除；如有相关语义请改放 `description` / `applies_to` / `io_schema`
-- 每个 action 必须有 `id` 与 `title`；`kind` 仅允许 `command`/`query`
-- 每个 rule 必须有 `id` / `title` / `severity`（`error`/`warn`/`info`）/ `when` / `constraint` / `message`
+- ⚠️ action / rule 的字段 `title` 已重命名为 `name`；老模型需逐个迁移
+- 每个 action 必须有 `id` 与 `name`；`kind` 仅允许 `command`/`query`
+- 每个 rule 必须有 `id` / `name` / `severity`（`error`/`warn`/`info`）/ `when` / `constraint` / `message`
 - 标签字段统一使用 `labels: string[]`（旧字段 `tags` / 单数 `label` 已废弃）
 
 **Rule 的“挂载位置”最佳实践（用于图谱合理出现）**：
@@ -542,7 +543,7 @@ semantic_model:
       behavior_layer_version: "0.1"
       actions:
         - id: pr/generate_two_plans
-          title: 生成两套请购方案（交期优先/价格优先）
+          name: 生成两套请购方案（交期优先/价格优先）
           kind: query
           operation: recommend
           entity_name: purchase_requisitions
@@ -559,7 +560,7 @@ semantic_model:
               additionalProperties: true
       rules:
         - id: sap_p2p/rule_blocked_supplier_guard
-          title: 阻断供应商拦截
+          name: 阻断供应商拦截
           severity: warn
           when: { entity: dataset }
           constraint: { type: security }

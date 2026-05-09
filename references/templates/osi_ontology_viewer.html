@@ -786,12 +786,12 @@
         const behaviorAnchor = anchorDataset;
         for (const a of actions || []) {
           if (!a || typeof a !== "object") continue;
-          const aid = `action:${a.id || a.title || Math.random().toString(16).slice(2)}`;
+          const aid = `action:${a.id || a.name || a.title || Math.random().toString(16).slice(2)}`;
           if (typeof a.id === "string" && a.id) actionIdToNodeId.set(a.id, aid);
           nodes.push({
             id: aid,
             kind: "action",
-            label: a.title || a.id || "(unnamed)",
+            label: a.name || a.title || a.id || "(unnamed)",
             description: a.description || "",
             raw: a,
           });
@@ -811,11 +811,11 @@
 
         for (const r of rules || []) {
           if (!r || typeof r !== "object") continue;
-          const rid = `rule:${r.id || r.title || Math.random().toString(16).slice(2)}`;
+          const rid = `rule:${r.id || r.name || r.title || Math.random().toString(16).slice(2)}`;
           nodes.push({
             id: rid,
             kind: "rule",
-            label: r.title || r.id || "(unnamed)",
+            label: r.name || r.title || r.id || "(unnamed)",
             description: r.message || r.description || "",
             raw: r,
           });
@@ -889,11 +889,11 @@
 
         el.actionList.innerHTML = "";
         for (const a of actions || []) {
-          const id = a.id || a.title || "";
+          const id = a.id || a.name || a.title || "";
           el.actionList.appendChild(
             mkItem({
               id: `action:${id}`,
-              title: a.title || a.id || "(unnamed)",
+              title: a.name || a.title || a.id || "(unnamed)",
               tag: (a.kind || "action").toUpperCase(),
               desc: a.description || "",
               onClick: () => selectNode(`action:${id}`),
@@ -903,11 +903,11 @@
 
         el.ruleList.innerHTML = "";
         for (const r of rules || []) {
-          const id = r.id || r.title || "";
+          const id = r.id || r.name || r.title || "";
           el.ruleList.appendChild(
             mkItem({
               id: `rule:${id}`,
-              title: r.title || r.id || "(unnamed)",
+              title: r.name || r.title || r.id || "(unnamed)",
               tag: (r.severity || "rule").toUpperCase(),
               desc: r.message || r.description || "",
               onClick: () => selectNode(`rule:${id}`),

@@ -254,7 +254,7 @@ behavior:
 # Action Schema (within behavior.actions)
 actions:
   - id: string                # e.g. "suppliers/block"
-    title: string             # Human-friendly title
+    name: string              # Human-friendly name
     description: string
     kind: "command"|"query"
     operation: string         # free-form, e.g. "block"|"unblock"|"create"|"analyze"

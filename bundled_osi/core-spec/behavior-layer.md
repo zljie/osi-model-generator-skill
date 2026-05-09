@@ -80,7 +80,7 @@ Action 用于描述：对当前 dataset（或其 field/metric/relationship）**�
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
 | `id` | string | 是 | 全局唯一标识（建议 `dataset/action` 或 UUID） |
-| `title` | string | 是 | 面向用户短标题 |
+| `name` | string | 是 | 面向用户短名称 |
 | `description` | string | 否 | 动作说明（业务语义） |
 | `applies_to` | object | 否 | 动作作用对象（dataset/field/metric/relationship） |
 | `io_schema` | object | 否* | 输入输出 JSON Schema（建议 draft 2020-12） |
@@ -104,7 +104,7 @@ Action 用于描述：对当前 dataset（或其 field/metric/relationship）**�
 | `entity_name` | string | ORM 实体名（通常等于 dataset.name 或业务对象名） |
 
 建议约束：
-- `id` 作为稳定引用键，尽量不使用中文；中文展示放在 `title`。
+- `id` 作为稳定引用键，尽量不使用中文；中文展示放在 `name`。
 - 写操作统一为 `kind: command`；读操作统一为 `kind: query`。
 - “列表/检索”与“读取单条”分开：`list/search` vs `read`。
 
@@ -173,7 +173,7 @@ Rule 用于描述：对 dataset（及其字段/指标/关系）施加的 **约�
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
 | `id` | string | 是 | 全局唯一标识 |
-| `title` | string | 是 | 规则短标题 |
+| `name` | string | 是 | 规则短名称 |
 | `description` | string | 否 | 规则说明 |
 | `severity` | enum | 是 | `error`/`warn`/`info` |
 | `when` | object | 是 | 适用范围（entity + selectors） |
