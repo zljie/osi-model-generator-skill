@@ -9,7 +9,7 @@
 ## 它能做什么
 
 - **建模**：依据用户的业务场景/数据源描述，生成对齐 `bundled_osi/core-spec/osi-schema.json` 的 OSI YAML（datasets / relationships / metrics）。
-- **行为层（可选）**：补齐 `semantic_model.behavior` 的 actions / rules / effects，用于确定性 action planning、归因解释与工程化校验。
+- **行为层（可选）**：补齐 `semantic_model.behavior` 的 actions / rules，用于确定性 action planning 与工程化治理。
 - **门禁校验**：一键调用 `bundled_osi/validation/validate.py` 做 schema、唯一性、引用、SQL 语法多维校验。
 - **可视化**：将 `references/templates/osi_ontology_viewer.html` 与 YAML 同目录分发，浏览器打开后可导入 YAML 渲染本体图谱（datasets / relationships / metrics / actions / rules）。
 
@@ -22,20 +22,18 @@ osi-model-generator-skill/
 ├── SKILL.md                              # 主 Skill（生成/校验/可视化协议）
 ├── README.md                             # 当前文件
 ├── README_BUNDLE.md                      # 离线分发说明
-├── behavior-layer.md                     # 行为层扩展规范（说明）
-├── behavior-layer.schema.json            # 行为层 JSON Schema
 ├── test-prompts.json                     # Skill 触发/回归测试用 prompt 集
 ├── bundled_osi/
 │   ├── core-spec/
 │   │   ├── spec.md                       # OSI Core v0.1.2 规范文档
 │   │   ├── spec.yaml                     # 规范 YAML 视图
 │   │   ├── osi-schema.json               # OSI Core JSON Schema（version: const "0.1.2"）
-│   │   ├── behavior-layer.md             # 行为层规范（bundle 副本）
-│   │   └── behavior-layer.schema.json    # 行为层 schema（bundle 副本）
+│   │   ├── behavior-layer.md             # 行为层扩展规范
+│   │   └── behavior-layer.schema.json    # 行为层 JSON Schema
 │   └── validation/
-│       └── validate.py                   # 官方校验脚本
+│       └── validate.py                   # 官方校验脚本（jsonschema + sqlglot）
 └── references/
-    ├── examples/                         # 参考示例（restaurant_ops_min / sap_p2p_min / dtp / actions / rules）
+    ├── examples/                         # 参考示例（见下方 “参考示例” 一节）
     └── templates/
         ├── osi_core_skeleton.yaml        # OSI 最小骨架模板
         └── osi_ontology_viewer.html      # 单页可视化模板（导入 YAML 后渲染图谱）
@@ -57,7 +55,7 @@ pip install pyyaml jsonschema sqlglot
 ### 2. 校验一个 OSI YAML
 
 ```bash
-python bundled_osi/validation/validate.py references/examples/restaurant_ops_min.yaml --summary
+python bundled_osi/validation/validate.py references/examples/sap_procurement_ontology.yaml --summary
 ```
 
 校验项：
@@ -69,7 +67,7 @@ python bundled_osi/validation/validate.py references/examples/restaurant_ops_min
 
 ### 3. 可视化一个 OSI 模型
 
-1. 把 `references/templates/osi_ontology_viewer.html` 复制到与目标 YAML **同目录**
+1. 把 `references/templates/osi_ontology_viewer.html` 复制到与目标 YAML **同目录**（例如参考 `references/examples/sap_procurement_ontology_viewer.html`）
 2. 浏览器打开该 HTML
 3. 右上角「导入 OSI YAML」选择该 YAML 即可渲染图谱
 
@@ -86,9 +84,9 @@ python bundled_osi/validation/validate.py references/examples/restaurant_ops_min
 
 Skill 的工作流（详见 `SKILL.md`）：
 
-1. **Step 0**：用例闭环拆解（对象 / 身份 / 关系 / 信号 / 动作 / 影响 / 门禁 / 回流）
+1. **Step 0**：用例闭环拆解（对象 / 身份 / 关系 / 信号 / 动作 / 门禁 / 回流）
 2. **Step 0.5**：行为层放置选择（first-class `semantic_model.behavior` vs legacy `custom_extensions` 嵌入）
-3. **Step 1–5**：生成 OSI Core 骨架 → datasets → relationships → metrics
+3. **Step 1–5**：生成 OSI Core 骨架 → datasets（含 `Field.type`） → relationships → metrics
 4. **Step 6**：行为层（actions / rules）
 5. **Step 7**：门禁校验（必须跑 `validate.py`）
 6. **Step 8**：生成可视化 HTML（与 YAML 同目录）
@@ -106,17 +104,26 @@ Skill 的工作流（详见 `SKILL.md`）：
 - `Expression.dialects` 至少 1 项；`DialectExpression` 仅 `dialect` + `expression`
 - `CustomExtension` 仅 `vendor_name`（枚举：`COMMON`/`SNOWFLAKE`/`SALESFORCE`/`DBT`/`DATABRICKS`）+ `data`（**JSON 字符串**）
 - `behavior`：`namespace` / `behavior_layer_version` / `actions` / `rules` 都必填（均允许空数组）
-- ⚠️ 已移除：顶层 `action_types` 别名、action 内的 `effects` / `tool_hint` / `idempotency`；标签字段统一为 `labels: string[]`（旧 `tags` / 单数 `label` 已废弃）
+- `BehaviorAction` 必填 `id` + `name`；`kind` 枚举：`command` / `query`
+- `BehaviorRule` 必填 `id` + `name` + `severity`（`error`/`warn`/`info`） + `when` + `constraint` + `message`
 - `Field.type`（可选）：逻辑属性类型枚举，作为 DB 映射锚点：`String` / `Number` / `Integer` / `Boolean` / `Date` / `DateTime` / `Time` / `JSON` / `Array`
+- ⚠️ **已移除/废弃**：
+  - 顶层 `action_types` 别名（统一用 `actions`）
+  - action 内的 `effects` / `tool_hint` / `idempotency`
+  - action / rule 的 `title`（重命名为 `name`）
+  - 标签字段 `tags` / 单数 `label`（统一为 `labels: string[]`）
 
 ---
 
 ## 参考示例
 
-- [`references/examples/restaurant_ops_min.yaml`](./references/examples/restaurant_ops_min.yaml)：餐饮经营分析最小骨架
-- [`references/examples/sap_p2p_min.yaml`](./references/examples/sap_p2p_min.yaml)：SAP P2P 缺料预警 + 行为层
-- [`references/examples/dtp_semantic_model.yaml`](./references/examples/dtp_semantic_model.yaml)：完整 DTP 语义模型
-- [`references/examples/actions.yaml`](./references/examples/actions.yaml) / [`rules.yaml`](./references/examples/rules.yaml)：行为层 actions / rules 参考集
+| 文件 | 场景 | 状态 |
+|---|---|---|
+| [`sap_procurement_ontology.yaml`](./references/examples/sap_procurement_ontology.yaml) + [`_viewer.html`](./references/examples/sap_procurement_ontology_viewer.html) | SAP P2P (PR→PO) 完整本体：5 datasets / 5 relationships / 6 metrics / 4 actions / 4 rules | ✅ PASS |
+| [`restaurant_ops_min.yaml`](./references/examples/restaurant_ops_min.yaml) | 餐饮经营分析最小骨架 | ✅ PASS |
+| [`sap_p2p_min.yaml`](./references/examples/sap_p2p_min.yaml) | SAP P2P 缺料预警精简版 + 行为层 | ✅ PASS |
+| [`dtp_semantic_model.yaml`](./references/examples/dtp_semantic_model.yaml) | 完整 DTP（Demand-to-Procurement）语义模型 | ⚠ 部分 rule 缺 `message`（待修） |
+| [`actions.yaml`](./references/examples/actions.yaml) / [`rules.yaml`](./references/examples/rules.yaml) | 行为层 actions / rules 语法参考集（markdown） | — |
 
 ---
 

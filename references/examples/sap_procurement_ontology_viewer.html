@@ -1,0 +1,1529 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OSI 本体结构浏览器</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6fbff;
+        --panel: rgba(255, 255, 255, 0.86);
+        --panel-solid: #ffffff;
+        --border: rgba(30, 58, 138, 0.14);
+        --border-strong: rgba(30, 58, 138, 0.22);
+        --text: #0b1b3a;
+        --muted: rgba(11, 27, 58, 0.62);
+        --brand: #2563eb;
+        --brand-2: #38bdf8;
+        --ok: #16a34a;
+        --warn: #d97706;
+        --bad: #dc2626;
+
+        --shadow: 0 18px 38px rgba(2, 12, 40, 0.10);
+        --shadow-soft: 0 10px 22px rgba(2, 12, 40, 0.08);
+
+        --grid: rgba(37, 99, 235, 0.08);
+        --grid2: rgba(56, 189, 248, 0.06);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(900px 520px at 12% 10%, rgba(56, 189, 248, 0.28), transparent 60%),
+          radial-gradient(820px 520px at 78% 0%, rgba(37, 99, 235, 0.20), transparent 55%),
+          radial-gradient(520px 520px at 70% 86%, rgba(56, 189, 248, 0.18), transparent 60%),
+          linear-gradient(180deg, #f6fbff, #f3f7ff);
+        overflow: hidden;
+      }
+
+      /* Subtle grid */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background:
+          linear-gradient(transparent 31px, var(--grid) 32px),
+          linear-gradient(90deg, transparent 31px, var(--grid2) 32px);
+        background-size: 32px 32px;
+        mask-image: radial-gradient(1200px 720px at 50% 18%, rgba(0,0,0,0.92), rgba(0,0,0,0.10));
+        pointer-events: none;
+      }
+
+      .app {
+        height: 100%;
+        display: grid;
+        grid-template-rows: 64px 1fr;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(14px);
+        background: rgba(255, 255, 255, 0.65);
+      }
+
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        line-height: 1;
+      }
+      .brand h1 {
+        margin: 0;
+        font-family: "Fraunces", serif;
+        letter-spacing: 0.3px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .brand .pill {
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(11, 27, 58, 0.7);
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.72);
+        border-radius: 999px;
+        box-shadow: var(--shadow-soft);
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--shadow-soft);
+        color: var(--text);
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .btn:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+      .btn:active { transform: translateY(0px); }
+      .btn.primary {
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(56, 189, 248, 0.92));
+        border-color: rgba(37, 99, 235, 0.35);
+        color: white;
+      }
+      .btn.small { padding: 7px 10px; border-radius: 10px; font-weight: 600; }
+      .btn.ghost { background: rgba(255,255,255,0.50); }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        max-width: 560px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--warn);
+        box-shadow: 0 0 0 5px rgba(217, 119, 6, 0.12);
+      }
+      .dot.ok { background: var(--ok); box-shadow: 0 0 0 5px rgba(22,163,74,0.12); }
+      .dot.bad { background: var(--bad); box-shadow: 0 0 0 5px rgba(220,38,38,0.12); }
+
+      main {
+        display: grid;
+        grid-template-columns: 360px 1fr 360px;
+        gap: 14px;
+        padding: 14px;
+        min-height: 0;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+        overflow: hidden;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .panel .hd {
+        padding: 14px 14px 10px 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .panel .hd h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .panel .hd .sub {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .panel .bd {
+        padding: 12px 14px 14px 14px;
+        overflow: auto;
+        min-height: 0;
+      }
+
+      .group { margin-bottom: 14px; }
+      .group-title {
+        font-size: 12px;
+        color: rgba(11,27,58,0.64);
+        font-weight: 700;
+        letter-spacing: 0.18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 8px 0;
+      }
+      .count {
+        font-size: 12px;
+        font-weight: 700;
+        color: rgba(37,99,235,0.92);
+        background: rgba(37,99,235,0.10);
+        border: 1px solid rgba(37,99,235,0.18);
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+
+      .list {
+        display: grid;
+        gap: 8px;
+      }
+      .item {
+        padding: 10px 10px;
+        border-radius: 14px;
+        border: 1px solid rgba(30,58,138,0.12);
+        background: rgba(255,255,255,0.70);
+        cursor: pointer;
+        box-shadow: 0 8px 16px rgba(2,12,40,0.06);
+      }
+      .item:hover { border-color: rgba(37,99,235,0.28); transform: translateY(-1px); }
+      .item .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .item .name {
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 0.15px;
+      }
+      .item .tag {
+        font-size: 11px;
+        font-weight: 700;
+        color: rgba(11,27,58,0.7);
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(30,58,138,0.16);
+        background: rgba(255,255,255,0.7);
+        white-space: nowrap;
+      }
+      .item .desc {
+        margin-top: 6px;
+        font-size: 12px;
+        color: rgba(11,27,58,0.66);
+        line-height: 1.35;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* Graph */
+      #graphWrap {
+        position: relative;
+        min-height: 0;
+      }
+      #graph {
+        width: 100%;
+        height: 100%;
+        border-radius: 18px;
+      }
+      .graphOverlay {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        display: flex;
+        gap: 8px;
+        z-index: 5;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .chip {
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255,255,255,0.72);
+        backdrop-filter: blur(10px);
+        padding: 7px 10px;
+        font-weight: 700;
+        font-size: 12px;
+        color: rgba(11,27,58,0.78);
+        box-shadow: var(--shadow-soft);
+        cursor: pointer;
+        user-select: none;
+      }
+      .chip.active {
+        background: rgba(37,99,235,0.12);
+        border-color: rgba(37,99,235,0.32);
+        color: rgba(37,99,235,0.95);
+      }
+
+      /* Details */
+      .kv {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 10px;
+        border-radius: 14px;
+        border: 1px solid rgba(30,58,138,0.12);
+        background: rgba(255,255,255,0.72);
+        margin-bottom: 10px;
+      }
+      .k {
+        font-size: 12px;
+        color: rgba(11,27,58,0.64);
+        font-weight: 800;
+      }
+      .v {
+        font-size: 12px;
+        color: rgba(11,27,58,0.84);
+        line-height: 1.35;
+        word-break: break-word;
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 11px;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: rgba(11,27,58,0.62);
+        line-height: 1.4;
+      }
+
+      input[type="file"] { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <div class="brand">
+          <h1>OSI 本体结构浏览器</h1>
+          <div class="pill">单页 · D3 图谱 · YAML 导入</div>
+        </div>
+        <div class="actions">
+          <label class="btn primary" for="fileInput" title="选择一个 OSI YAML 文件导入">
+            导入 OSI YAML
+          </label>
+          <input id="fileInput" type="file" accept=".yaml,.yml" />
+          <button id="loadDtpBtn" class="btn ghost" title="尝试自动发现并加载同目录的 YAML">自动检测 YAML</button>
+          <button id="fitBtn" class="btn small" title="视图自适应">Fit</button>
+        </div>
+        <div class="status" id="status">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusText">等待导入 OSI YAML（或点击“加载 DTP 示例”）</span>
+        </div>
+      </header>
+
+      <main>
+        <!-- Left: Resources -->
+        <section class="panel">
+          <div class="hd">
+            <div>
+              <h2>资源列表</h2>
+              <div class="sub">对象 / 信号 / 动作 / 规则</div>
+            </div>
+            <div class="btn small" id="clearSelectionBtn" title="取消选中">清空</div>
+          </div>
+          <div class="bd">
+            <div class="group">
+              <div class="group-title">
+                <span>Datasets（对象）</span>
+                <span class="count" id="dsCount">0</span>
+              </div>
+              <div class="list" id="dsList"></div>
+            </div>
+            <div class="group">
+              <div class="group-title">
+                <span>Metrics（指标）</span>
+                <span class="count" id="metricCount">0</span>
+              </div>
+              <div class="list" id="metricList"></div>
+            </div>
+            <div class="group">
+              <div class="group-title">
+                <span>Actions（动作）</span>
+                <span class="count" id="actionCount">0</span>
+              </div>
+              <div class="list" id="actionList"></div>
+            </div>
+            <div class="group">
+              <div class="group-title">
+                <span>Rules（规则）</span>
+                <span class="count" id="ruleCount">0</span>
+              </div>
+              <div class="list" id="ruleList"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Center: Graph -->
+        <section class="panel" id="graphWrap">
+          <div class="graphOverlay">
+            <div class="chip active" data-filter="all">全部</div>
+            <div class="chip" data-filter="datasets">对象</div>
+            <div class="chip" data-filter="metrics">指标</div>
+            <div class="chip" data-filter="actions">动作</div>
+            <div class="chip" data-filter="rules">规则</div>
+            <div class="chip" data-filter="relationships">仅关系</div>
+          </div>
+          <svg id="graph" aria-label="OSI 图谱视图"></svg>
+        </section>
+
+        <!-- Right: Details -->
+        <section class="panel">
+          <div class="hd">
+            <div>
+              <h2>详情面板</h2>
+              <div class="sub">选中一个节点查看</div>
+            </div>
+            <div class="btn small" id="exportBtn" title="导出当前 YAML（原样）">导出 YAML</div>
+          </div>
+          <div class="bd" id="detail">
+            <div class="hint">
+              <div style="font-weight: 800; margin-bottom: 6px;">操作提示</div>
+              <ul style="margin: 0; padding-left: 18px;">
+                <li>左侧列表点击可定位图中节点</li>
+                <li>图中可拖拽节点；滚轮缩放；拖动画布平移</li>
+                <li>顶部可导入 YAML；“加载 DTP 示例”会尝试读取你工作区的 DTP OSI 文件</li>
+                <li>右上“导出 YAML”会导出当前载入的原始 YAML</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- libs -->
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+
+    <script>
+      // NOTE: 该模板与工作区根目录的 osi_ontology_viewer.html 保持同构。
+      // 若你对 viewer 做了新的迭代，请同步更新此模板（用于 skill 分发与闭环交付）。
+
+      const state = {
+        rawYaml: "",
+        doc: null,
+        model: null,
+        nodes: [],
+        links: [],
+        selectedId: null,
+        selectedEdgeId: null,
+        filter: "all",
+        zoom: null,
+        simulation: null,
+      };
+
+      const el = {
+        fileInput: document.getElementById("fileInput"),
+        loadDtpBtn: document.getElementById("loadDtpBtn"),
+        fitBtn: document.getElementById("fitBtn"),
+        exportBtn: document.getElementById("exportBtn"),
+        clearSelectionBtn: document.getElementById("clearSelectionBtn"),
+
+        statusDot: document.getElementById("statusDot"),
+        statusText: document.getElementById("statusText"),
+
+        dsCount: document.getElementById("dsCount"),
+        metricCount: document.getElementById("metricCount"),
+        actionCount: document.getElementById("actionCount"),
+        ruleCount: document.getElementById("ruleCount"),
+
+        dsList: document.getElementById("dsList"),
+        metricList: document.getElementById("metricList"),
+        actionList: document.getElementById("actionList"),
+        ruleList: document.getElementById("ruleList"),
+
+        detail: document.getElementById("detail"),
+        svg: d3.select("#graph"),
+      };
+
+      function setStatus(kind, text) {
+        el.statusText.textContent = text;
+        el.statusDot.classList.remove("ok", "bad");
+        if (kind === "ok") el.statusDot.classList.add("ok");
+        else if (kind === "bad") el.statusDot.classList.add("bad");
+      }
+
+      function safeGet(obj, path, fallback = undefined) {
+        try {
+          return path.split(".").reduce((acc, k) => (acc ? acc[k] : undefined), obj) ?? fallback;
+        } catch {
+          return fallback;
+        }
+      }
+
+      function normalizeOsiDoc(doc) {
+        if (!doc || typeof doc !== "object") throw new Error("YAML 不是对象结构");
+        const models = Array.isArray(doc.semantic_model) ? doc.semantic_model : [];
+        if (!models.length || typeof models[0] !== "object") throw new Error("缺少 semantic_model[0]");
+        return { doc, model: models[0] };
+      }
+
+      function hasZh(s) {
+        return /[\u4e00-\u9fff]/.test(String(s || ""));
+      }
+
+      function pickZhNameFromSynonyms(synonyms, fallback) {
+        const arr = Array.isArray(synonyms) ? synonyms : [];
+        const zh = arr.find((x) => typeof x === "string" && hasZh(x));
+        return zh || fallback;
+      }
+
+      function datasetDisplay(ds) {
+        const name = ds?.name || "(unnamed)";
+        const zh = pickZhNameFromSynonyms(ds?.ai_context?.synonyms, name);
+        return {
+          primary: zh,
+          secondary: zh === name ? "" : name,
+        };
+      }
+
+      function parseMaybeJsonString(v) {
+        if (typeof v !== "string") return v;
+        const s = v.trim();
+        if (!s) return v;
+        if (s.startsWith("{") && s.endsWith("}")) {
+          try {
+            return JSON.parse(s);
+          } catch (_) {
+            return v;
+          }
+        }
+        return v;
+      }
+
+      function extractEmbeddedBehavior(datasets) {
+        const actions = [];
+        const rules = [];
+        let namespace = null;
+
+        for (const ds of datasets || []) {
+          const exts = ds?.custom_extensions || [];
+          for (const ex of exts) {
+            if (!ex || typeof ex !== "object") continue;
+            if (ex.vendor_name !== "COMMON") continue;
+            const data = parseMaybeJsonString(ex.data);
+            if (!data || typeof data !== "object") continue;
+
+            if (!data.behavior_layer_version || !data.namespace) continue;
+            namespace = namespace || data.namespace;
+
+            const a = data.actions || [];
+            const r = data.rules || [];
+            if (Array.isArray(a)) actions.push(...a.filter((x) => x && typeof x === "object"));
+            if (Array.isArray(r)) rules.push(...r.filter((x) => x && typeof x === "object"));
+          }
+        }
+
+        // de-dupe by id
+        const dedupe = (arr, key) => {
+          const seen = new Set();
+          const out = [];
+          for (const it of arr) {
+            const v = it?.[key];
+            if (typeof v === "string" && v) {
+              if (seen.has(v)) continue;
+              seen.add(v);
+            }
+            out.push(it);
+          }
+          return out;
+        };
+
+        return {
+          namespace,
+          actions: dedupe(actions, "id"),
+          rules: dedupe(rules, "id"),
+        };
+      }
+
+      function extractMetricDatasets(metric, datasetSet) {
+        const out = new Set();
+
+        for (const ex of metric?.custom_extensions || []) {
+          if (!ex || typeof ex !== "object") continue;
+          if (ex.vendor_name !== "COMMON") continue;
+          const data = parseMaybeJsonString(ex.data);
+          if (!data || typeof data !== "object") continue;
+          const ds =
+            data.depends_on_datasets ||
+            data.dataset_names ||
+            data.datasets ||
+            data.metric_datasets ||
+            data.applies_to_datasets;
+          if (Array.isArray(ds)) {
+            for (const d of ds) if (typeof d === "string" && datasetSet.has(d)) out.add(d);
+          }
+        }
+
+        const dialects = safeGet(metric, "expression.dialects", []);
+        if (Array.isArray(dialects)) {
+          for (const d of dialects) {
+            const expr = String(d?.expression || "");
+            const re = /([A-Za-z_][A-Za-z0-9_]*)\./g;
+            let m;
+            while ((m = re.exec(expr))) {
+              const token = m[1];
+              if (datasetSet.has(token)) out.add(token);
+            }
+          }
+        }
+
+        return [...out];
+      }
+
+      function buildGraph(model) {
+        const datasets = Array.isArray(model.datasets) ? model.datasets : [];
+        const relationships = Array.isArray(model.relationships) ? model.relationships : [];
+        const metrics = Array.isArray(model.metrics) ? model.metrics : [];
+        const behavior = model.behavior && typeof model.behavior === "object" ? model.behavior : null;
+
+        // v0.1.2 first-class behavior + v0.1.1 legacy embedding in dataset.custom_extensions
+        const embedded = extractEmbeddedBehavior(datasets);
+        const actions = [
+          ...(behavior ? (behavior.actions || []) : []),
+          ...(embedded.actions || []),
+        ];
+        const rules = [
+          ...(behavior ? (behavior.rules || []) : []),
+          ...(embedded.rules || []),
+        ];
+
+        const nodes = [];
+        const links = [];
+
+        const dsByName = new Map();
+        for (const ds of datasets) {
+          if (!ds || typeof ds !== "object") continue;
+          dsByName.set(ds.name, ds);
+        }
+
+        // Datasets
+        for (const ds of datasets) {
+          if (!ds || typeof ds !== "object") continue;
+          const disp = datasetDisplay(ds);
+          nodes.push({
+            id: `dataset:${ds.name}`,
+            kind: "dataset",
+            label: disp.primary,
+            secondary: disp.secondary,
+            description: ds.description || safeGet(ds, "ai_context.instructions", ""),
+            raw: ds,
+          });
+        }
+
+        // Relationships (dataset↔dataset)
+        for (const r of relationships) {
+          if (!r || typeof r !== "object") continue;
+          const from = `dataset:${r.from}`;
+          const to = `dataset:${r.to}`;
+
+          const fromDs = dsByName.get(r.from);
+          const toDs = dsByName.get(r.to);
+          const fromDisp = datasetDisplay(fromDs);
+          const toDisp = datasetDisplay(toDs);
+
+          const syns = safeGet(r, "ai_context.synonyms", []);
+          const synLabel = pickZhNameFromSynonyms(syns, Array.isArray(syns) ? syns[0] : "") || "";
+
+          // 更“业务语境化”的动态描述：不依赖静态 description
+          const fromCols = (r.from_columns || []).join(", ");
+          const toCols = (r.to_columns || []).join(", ");
+          const narrative =
+            `「${fromDisp.primary}」通过键（${fromCols || "未声明"}）关联到「${toDisp.primary}」` +
+            (toCols ? `（目标键：${toCols}）` : "") +
+            `，用于串联 DTP 证据链与跨对象下钻分析。`;
+
+          // 线上尽量简洁：优先 synonyms（若有），否则用“中文对象名→中文对象名”
+          const displayLabel = synLabel || `${fromDisp.primary} → ${toDisp.primary}`;
+
+          links.push({
+            id: `rel:${r.name || `${r.from}->${r.to}`}`,
+            kind: "relationship",
+            source: from,
+            target: to,
+            label: displayLabel,
+            synonyms: Array.isArray(syns) ? syns : [],
+            narrative,
+            raw: r,
+          });
+        }
+
+        // Metrics: 尝试挂到它真实依赖的 datasets（解析 expression / 或 custom_extensions 显式声明）
+        const anchorDataset = datasets[0]?.name ? `dataset:${datasets[0].name}` : null;
+        const datasetSet = new Set(datasets.map((d) => d?.name).filter(Boolean));
+        for (const m of metrics) {
+          if (!m || typeof m !== "object") continue;
+          const mid = `metric:${m.name}`;
+          nodes.push({
+            id: mid,
+            kind: "metric",
+            label: m.name || "(unnamed)",
+            description: m.description || "",
+            raw: m,
+          });
+          const targets = extractMetricDatasets(m, datasetSet);
+          if (targets.length) {
+            for (const ds of targets) {
+              links.push({
+                id: `metriclink:${m.name}:${ds}`,
+                kind: "metriclink",
+                source: mid,
+                target: `dataset:${ds}`,
+                label: "measures",
+                raw: { note: "metric anchored by expression/custom_extensions", dataset: ds },
+              });
+            }
+          } else if (anchorDataset) {
+            links.push({
+              id: `metriclink:${m.name}:fallback`,
+              kind: "metriclink",
+              source: mid,
+              target: anchorDataset,
+              label: "measures",
+              raw: { note: "metric anchored to first dataset (fallback)" },
+            });
+          }
+        }
+
+        // Actions & Rules nodes: anchor to the correct dataset/action when possible
+        const actionIdToNodeId = new Map();
+
+        const guessEntityFromId = (id) => {
+          if (typeof id !== "string") return null;
+          const head = id.split("/")[0];
+          if (datasetSet.has(head)) return head;
+          return null;
+        };
+        const guessDatasetFromRule = (rule) => {
+          let ds =
+            safeGet(rule, "applies_to.dataset") ||
+            safeGet(rule, "applies_to.dataset_name") ||
+            safeGet(rule, "applies_to.datasetName") ||
+            safeGet(rule, "when.dataset") ||
+            safeGet(rule, "when.dataset_name") ||
+            safeGet(rule, "when.entity_name");
+
+          const dsArr = safeGet(rule, "applies_to.datasets");
+          if (!ds && Array.isArray(dsArr) && typeof dsArr[0] === "string") ds = dsArr[0];
+
+          const field = safeGet(rule, "constraint.field");
+          if (!ds && typeof field === "string" && field.includes(".")) ds = field.split(".")[0];
+
+          const selDs =
+            safeGet(rule, "selectors.dataset") ||
+            safeGet(rule, "constraint.selectors.dataset") ||
+            safeGet(rule, "constraint.dataset");
+          if (!ds && typeof selDs === "string") ds = selDs;
+
+          if (!ds && typeof rule?.id === "string" && rule.id.includes("/")) {
+            const head = rule.id.split("/")[0];
+            if (datasetSet.has(head)) ds = head;
+          }
+
+          return typeof ds === "string" && datasetSet.has(ds) ? ds : null;
+        };
+
+        const guessActionNodeFromRule = (rule) => {
+          const actionId =
+            safeGet(rule, "applies_to.action_id") ||
+            safeGet(rule, "applies_to.actionId") ||
+            safeGet(rule, "when.action_id") ||
+            safeGet(rule, "when.actionId") ||
+            safeGet(rule, "constraint.action_id") ||
+            safeGet(rule, "constraint.actionId");
+          if (typeof actionId === "string" && actionIdToNodeId.has(actionId)) return actionIdToNodeId.get(actionId);
+          return null;
+        };
+
+        const behaviorAnchor = anchorDataset;
+        for (const a of actions || []) {
+          if (!a || typeof a !== "object") continue;
+          const aid = `action:${a.id || a.name || a.title || Math.random().toString(16).slice(2)}`;
+          if (typeof a.id === "string" && a.id) actionIdToNodeId.set(a.id, aid);
+          nodes.push({
+            id: aid,
+            kind: "action",
+            label: a.name || a.title || a.id || "(unnamed)",
+            description: a.description || "",
+            raw: a,
+          });
+          const entity = a.entity_name || guessEntityFromId(a.id) || null;
+          const target = entity ? `dataset:${entity}` : behaviorAnchor;
+          if (target) {
+            links.push({
+              id: `actionlink:${aid}`,
+              kind: "actionlink",
+              source: aid,
+              target,
+              label: a.kind || "action",
+              raw: { note: "action anchored to dataset (layout helper)" },
+            });
+          }
+        }
+
+        for (const r of rules || []) {
+          if (!r || typeof r !== "object") continue;
+          const rid = `rule:${r.id || r.name || r.title || Math.random().toString(16).slice(2)}`;
+          nodes.push({
+            id: rid,
+            kind: "rule",
+            label: r.name || r.title || r.id || "(unnamed)",
+            description: r.message || r.description || "",
+            raw: r,
+          });
+          const actionNodeId = guessActionNodeFromRule(r);
+          const dsName = guessDatasetFromRule(r);
+          const target = actionNodeId || (dsName ? `dataset:${dsName}` : behaviorAnchor);
+          if (target) {
+            links.push({
+              id: `rulelink:${rid}`,
+              kind: "rulelink",
+              source: rid,
+              target,
+              label: r.severity || "rule",
+              raw: { note: actionNodeId ? "rule anchored to action" : dsName ? "rule anchored to dataset" : "rule anchored to first dataset (fallback)" },
+            });
+          }
+        }
+
+        return { nodes, links, datasets, metrics, actions, rules, relationships };
+      }
+
+      function renderLists(modelParts) {
+        const { datasets, metrics, actions, rules } = modelParts;
+
+        el.dsCount.textContent = String(datasets.length);
+        el.metricCount.textContent = String(metrics.length);
+        el.actionCount.textContent = String((actions || []).length);
+        el.ruleCount.textContent = String((rules || []).length);
+
+        const mkItem = ({ id, title, tag, desc, onClick }) => {
+          const div = document.createElement("div");
+          div.className = "item";
+          div.innerHTML = `
+            <div class="top">
+              <div class="name">${escapeHtml(title)}</div>
+              <div class="tag">${escapeHtml(tag)}</div>
+            </div>
+            <div class="desc">${escapeHtml(desc || "")}</div>
+          `;
+          div.addEventListener("click", onClick);
+          return div;
+        };
+
+        el.dsList.innerHTML = "";
+        for (const d of datasets) {
+          const disp = datasetDisplay(d);
+          const title = disp.secondary ? `${disp.primary} · ${disp.secondary}` : disp.primary;
+          el.dsList.appendChild(
+            mkItem({
+              id: `dataset:${d.name}`,
+              title,
+              tag: "Dataset",
+              desc: d.description || "",
+              onClick: () => selectNode(`dataset:${d.name}`),
+            })
+          );
+        }
+
+        el.metricList.innerHTML = "";
+        for (const m of metrics) {
+          el.metricList.appendChild(
+            mkItem({
+              id: `metric:${m.name}`,
+              title: m.name || "(unnamed)",
+              tag: "Metric",
+              desc: m.description || "",
+              onClick: () => selectNode(`metric:${m.name}`),
+            })
+          );
+        }
+
+        el.actionList.innerHTML = "";
+        for (const a of actions || []) {
+          const id = a.id || a.name || a.title || "";
+          el.actionList.appendChild(
+            mkItem({
+              id: `action:${id}`,
+              title: a.name || a.title || a.id || "(unnamed)",
+              tag: (a.kind || "action").toUpperCase(),
+              desc: a.description || "",
+              onClick: () => selectNode(`action:${id}`),
+            })
+          );
+        }
+
+        el.ruleList.innerHTML = "";
+        for (const r of rules || []) {
+          const id = r.id || r.name || r.title || "";
+          el.ruleList.appendChild(
+            mkItem({
+              id: `rule:${id}`,
+              title: r.name || r.title || r.id || "(unnamed)",
+              tag: (r.severity || "rule").toUpperCase(),
+              desc: r.message || r.description || "",
+              onClick: () => selectNode(`rule:${id}`),
+            })
+          );
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function renderDetails(node) {
+        if (!node) {
+          el.detail.innerHTML = `<div class="hint">未选中任何节点。</div>`;
+          return;
+        }
+
+        const raw = node.raw || {};
+        const kind = node.kind;
+
+        const kvs = [];
+        kvs.push(["类型", kind]);
+        kvs.push(["标识", node.id]);
+        kvs.push(["名称", node.label]);
+        if (node.secondary) kvs.push(["英文名", node.secondary]);
+
+        if (kind === "dataset") {
+          kvs.push(["source", raw.source || ""]);
+          if (raw.primary_key) kvs.push(["primary_key", JSON.stringify(raw.primary_key)]);
+          if (raw.unique_keys) kvs.push(["unique_keys", JSON.stringify(raw.unique_keys)]);
+          kvs.push(["fields", String((raw.fields || []).length)]);
+        }
+        if (kind === "metric") {
+          kvs.push(["表达式", safeGet(raw, "expression.dialects.0.expression", "")]);
+        }
+        if (kind === "action") {
+          kvs.push(["action_id", raw.id || ""]);
+          kvs.push(["kind", raw.kind || ""]);
+          kvs.push(["operation", raw.operation || ""]);
+          kvs.push(["entity_name", raw.entity_name || ""]);
+        }
+        if (kind === "rule") {
+          kvs.push(["rule_id", raw.id || ""]);
+          kvs.push(["severity", raw.severity || ""]);
+          kvs.push(["message", raw.message || raw.description || ""]);
+        }
+
+        const desc = node.description || "";
+
+        el.detail.innerHTML = `
+          <div class="kv">
+            <div class="k">摘要</div>
+            <div class="v">${escapeHtml(desc || "—")}</div>
+          </div>
+          ${kvs
+            .map(
+              ([k, v]) => `
+                <div class="kv">
+                  <div class="k">${escapeHtml(k)}</div>
+                  <div class="v ${k.includes("expression") ? "mono" : ""}">${escapeHtml(v || "—")}</div>
+                </div>
+              `
+            )
+            .join("")}
+          <div class="kv">
+            <div class="k">原始片段</div>
+            <div class="v mono">${escapeHtml(JSON.stringify(raw, null, 2))}</div>
+          </div>
+        `;
+      }
+
+      function renderEdgeDetails(edge) {
+        if (!edge) {
+          if (!state.selectedId) renderDetails(null);
+          return;
+        }
+
+        const raw = edge.raw || {};
+        const syns = edge.synonyms || safeGet(raw, "ai_context.synonyms", []) || [];
+        const synText = Array.isArray(syns) ? syns.join("，") : "";
+
+        const kvs = [];
+        kvs.push(["类型", "relationship"]);
+        kvs.push(["名称", raw.name || edge.label || ""]);
+        if (synText) kvs.push(["同义词", synText]);
+        kvs.push(["from → to", `${raw.from} → ${raw.to}`]);
+        if (raw.from_columns) kvs.push(["from_columns", JSON.stringify(raw.from_columns)]);
+        if (raw.to_columns) kvs.push(["to_columns", JSON.stringify(raw.to_columns)]);
+
+        const narrative = edge.narrative || "—";
+
+        el.detail.innerHTML = `
+          <div class="kv">
+            <div class="k">业务解释（动态生成）</div>
+            <div class="v">${escapeHtml(narrative)}</div>
+          </div>
+          ${kvs
+            .map(
+              ([k, v]) => `
+                <div class="kv">
+                  <div class="k">${escapeHtml(k)}</div>
+                  <div class="v ${k.includes("columns") ? "mono" : ""}">${escapeHtml(v || "—")}</div>
+                </div>
+              `
+            )
+            .join("")}
+          <div class="kv">
+            <div class="k">原始片段</div>
+            <div class="v mono">${escapeHtml(JSON.stringify(raw, null, 2))}</div>
+          </div>
+        `;
+      }
+
+      function colorForKind(kind) {
+        if (kind === "dataset") return { fill: "rgba(37,99,235,0.14)", stroke: "rgba(37,99,235,0.65)" };
+        if (kind === "metric") return { fill: "rgba(56,189,248,0.18)", stroke: "rgba(2,132,199,0.75)" };
+        if (kind === "action") return { fill: "rgba(34,197,94,0.14)", stroke: "rgba(22,163,74,0.72)" };
+        if (kind === "rule") return { fill: "rgba(245,158,11,0.16)", stroke: "rgba(217,119,6,0.74)" };
+        return { fill: "rgba(148,163,184,0.16)", stroke: "rgba(71,85,105,0.62)" };
+      }
+
+      function shapePath(kind, r) {
+        if (kind === "dataset") {
+          const w = r * 2.6, h = r * 1.55;
+          const x = -w / 2, y = -h / 2;
+          const rr = Math.min(14, r * 0.55);
+          return `M${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h - rr}Q${x + w},${y + h} ${x + w - rr},${y + h}H${x + rr}Q${x},${y + h} ${x},${y + h - rr}V${y + rr}Q${x},${y} ${x + rr},${y}Z`;
+        }
+        if (kind === "metric") {
+          return d3.symbol().type(d3.symbolCircle).size(r * r * 5)();
+        }
+        function hexagonPath(rr) {
+          const pts = [];
+          const rot = Math.PI / 6;
+          for (let i = 0; i < 6; i++) {
+            const a = rot + (Math.PI / 3) * i;
+            pts.push([rr * Math.cos(a), rr * Math.sin(a)]);
+          }
+          return `M${pts.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join("L")}Z`;
+        }
+        if (kind === "action") return hexagonPath(r * 1.05);
+        if (kind === "rule") return d3.symbol().type(d3.symbolDiamond).size(r * r * 5)();
+        return d3.symbol().type(d3.symbolSquare).size(r * r * 5)();
+      }
+
+      function nodeRadius(d) {
+        if (d.kind === "dataset") return 18;
+        if (d.kind === "metric") return 14;
+        if (d.kind === "action") return 14;
+        if (d.kind === "rule") return 14;
+        return 12;
+      }
+
+      function initGraph() {
+        const svg = el.svg;
+        svg.selectAll("*").remove();
+
+        const { width, height } = svg.node().getBoundingClientRect();
+        svg.attr("viewBox", [0, 0, width, height]);
+
+        const g = svg.append("g").attr("class", "viewport");
+
+        state.zoom = d3
+          .zoom()
+          .scaleExtent([0.25, 3.2])
+          .on("zoom", (event) => g.attr("transform", event.transform));
+        svg.call(state.zoom);
+
+        const defs = svg.append("defs");
+        defs
+          .append("marker")
+          .attr("id", "arrowRel")
+          .attr("viewBox", "0 -5 10 10")
+          .attr("refX", 14)
+          .attr("refY", 0)
+          .attr("markerWidth", 8)
+          .attr("markerHeight", 8)
+          .attr("orient", "auto")
+          .append("path")
+          .attr("d", "M0,-5L10,0L0,5")
+          .attr("fill", "rgba(37,99,235,0.68)");
+
+        defs
+          .append("marker")
+          .attr("id", "arrowSoft")
+          .attr("viewBox", "0 -5 10 10")
+          .attr("refX", 14)
+          .attr("refY", 0)
+          .attr("markerWidth", 7)
+          .attr("markerHeight", 7)
+          .attr("orient", "auto")
+          .append("path")
+          .attr("d", "M0,-5L10,0L0,5")
+          .attr("fill", "rgba(2,132,199,0.26)");
+
+        svg
+          .append("radialGradient")
+          .attr("id", "vignette")
+          .selectAll("stop")
+          .data([
+            { offset: "0%", color: "rgba(255,255,255,0.0)" },
+            { offset: "70%", color: "rgba(255,255,255,0.0)" },
+            { offset: "100%", color: "rgba(2,12,40,0.06)" },
+          ])
+          .enter()
+          .append("stop")
+          .attr("offset", (d) => d.offset)
+          .attr("stop-color", (d) => d.color);
+
+        svg
+          .append("rect")
+          .attr("x", 0)
+          .attr("y", 0)
+          .attr("width", width)
+          .attr("height", height)
+          .attr("fill", "url(#vignette)")
+          .style("pointer-events", "none");
+
+        const linkLayer = g.append("g").attr("class", "links");
+        const edgeLabelLayer = g.append("g").attr("class", "edge-labels");
+        const nodeLayer = g.append("g").attr("class", "nodes");
+        const labelLayer = g.append("g").attr("class", "labels");
+
+        state.simulation = d3
+          .forceSimulation(state.nodes)
+          .force(
+            "link",
+            d3.forceLink(state.links).id((d) => d.id).distance((l) => (l.kind === "relationship" ? 140 : 90)).strength((l) => (l.kind === "relationship" ? 0.55 : 0.25))
+          )
+          .force("charge", d3.forceManyBody().strength(-380))
+          .force("center", d3.forceCenter(width / 2, height / 2))
+          .force("collide", d3.forceCollide().radius((d) => nodeRadius(d) + 18).iterations(2))
+          .force("x", d3.forceX(width / 2).strength(0.03))
+          .force("y", d3.forceY(height / 2).strength(0.03));
+
+        const link = linkLayer
+          .selectAll("line")
+          .data(state.links, (d) => d.id)
+          .join("line")
+          .attr("stroke", (d) => (d.kind === "relationship" ? "rgba(37,99,235,0.58)" : "rgba(2,132,199,0.22)"))
+          .attr("stroke-width", (d) => (d.kind === "relationship" ? 2.2 : 1.3))
+          .attr("stroke-dasharray", (d) => (d.kind === "relationship" ? null : "3 5"))
+          .attr("marker-end", (d) => (d.kind === "relationship" ? "url(#arrowRel)" : "url(#arrowSoft)"))
+          .attr("opacity", 0.95)
+          .style("cursor", (d) => (d.kind === "relationship" ? "pointer" : "default"))
+          .on("click", (event, d) => {
+            if (d.kind !== "relationship") return;
+            event.stopPropagation();
+            selectEdge(d.id);
+          });
+
+        const relLinks = state.links.filter((d) => d.kind === "relationship");
+        const edgeLabel = edgeLabelLayer
+          .selectAll("g")
+          .data(relLinks, (d) => d.id)
+          .join("g")
+          .attr("class", "edge-label")
+          .style("pointer-events", "none")
+          .each(function (d) {
+            const g = d3.select(this);
+            g.selectAll("*").remove();
+
+            const txt = String(d.label || "").trim();
+            const short = txt.length > 18 ? txt.slice(0, 18) + "…" : txt;
+
+            const rect = g
+              .append("rect")
+              .attr("rx", 10)
+              .attr("ry", 10)
+              .attr("fill", "rgba(255,255,255,0.92)")
+              .attr("stroke", "rgba(37,99,235,0.26)")
+              .attr("stroke-width", 1.0);
+
+            const text = g
+              .append("text")
+              .attr("text-anchor", "middle")
+              .attr("alignment-baseline", "middle")
+              .attr("fill", "rgba(11,27,58,0.86)")
+              .attr("font-size", 10.5)
+              .attr("font-weight", 800)
+              .style("paint-order", "stroke")
+              .style("stroke", "rgba(255,255,255,0.96)")
+              .style("stroke-width", 4)
+              .text(short);
+
+            const bb = text.node().getBBox();
+            rect.attr("x", bb.x - 10).attr("y", bb.y - 6).attr("width", bb.width + 20).attr("height", bb.height + 12);
+          });
+
+        const node = nodeLayer
+          .selectAll("path")
+          .data(state.nodes, (d) => d.id)
+          .join("path")
+          .attr("d", (d) => shapePath(d.kind, nodeRadius(d)))
+          .attr("fill", (d) => colorForKind(d.kind).fill)
+          .attr("stroke", (d) => colorForKind(d.kind).stroke)
+          .attr("stroke-width", (d) => (d.id === state.selectedId ? 3.2 : 2.0))
+          .attr("filter", "drop-shadow(0 10px 14px rgba(2,12,40,0.10))")
+          .style("cursor", "pointer")
+          .on("click", (event, d) => {
+            event.stopPropagation();
+            selectNode(d.id);
+          })
+          .call(
+            d3
+              .drag()
+              .on("start", (event, d) => {
+                if (!event.active) state.simulation.alphaTarget(0.22).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+              })
+              .on("drag", (event, d) => {
+                d.fx = event.x;
+                d.fy = event.y;
+              })
+              .on("end", (event, d) => {
+                if (!event.active) state.simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+              })
+          );
+
+        const label = labelLayer
+          .selectAll("text")
+          .data(state.nodes, (d) => d.id)
+          .join("text")
+          .text((d) => d.label)
+          .attr("text-anchor", "middle")
+          .attr("alignment-baseline", "middle")
+          .attr("fill", "rgba(11,27,58,0.84)")
+          .attr("font-size", (d) => (d.kind === "dataset" ? 12 : 11))
+          .attr("font-weight", 800)
+          .style("pointer-events", "none")
+          .style("paint-order", "stroke")
+          .style("stroke", "rgba(255,255,255,0.85)")
+          .style("stroke-width", 4);
+
+        svg.on("click", () => {
+          selectNode(null);
+          selectEdge(null);
+        });
+
+        function applyFilterVisibility(nodeSel, labelSel, linkSel, edgeLabelSel) {
+          const f = state.filter;
+          const showAll = f === "all";
+          const onlyRel = f === "relationships";
+
+          nodeSel.attr("display", (d) => {
+            if (onlyRel) return d.kind === "dataset" ? null : "none";
+            if (showAll) return null;
+            if (f === "datasets") return d.kind === "dataset" ? null : "none";
+            if (f === "metrics") return d.kind === "metric" ? null : "none";
+            if (f === "actions") return d.kind === "action" ? null : "none";
+            if (f === "rules") return d.kind === "rule" ? null : "none";
+            return null;
+          });
+
+          labelSel.attr("display", (d) => {
+            if (onlyRel) return d.kind === "dataset" ? null : "none";
+            if (showAll) return null;
+            if (f === "datasets") return d.kind === "dataset" ? null : "none";
+            if (f === "metrics") return d.kind === "metric" ? null : "none";
+            if (f === "actions") return d.kind === "action" ? null : "none";
+            if (f === "rules") return d.kind === "rule" ? null : "none";
+            return null;
+          });
+
+          linkSel.attr("display", (d) => {
+            if (onlyRel) return d.kind === "relationship" ? null : "none";
+            if (showAll) return null;
+            if (f === "datasets") return d.kind === "relationship" ? null : "none";
+            if (f === "metrics") return d.kind === "metriclink" ? null : "none";
+            if (f === "actions") return d.kind === "actionlink" ? null : "none";
+            if (f === "rules") return d.kind === "rulelink" ? null : "none";
+            return null;
+          });
+
+          if (edgeLabelSel) {
+            edgeLabelSel.attr("display", () => {
+              if (onlyRel) return null;
+              if (showAll) return null;
+              if (f === "datasets") return null;
+              return "none";
+            });
+          }
+        }
+
+        function ticked() {
+          link.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y).attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
+          node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+          label.attr("x", (d) => d.x).attr("y", (d) => d.y);
+          edgeLabel.attr("transform", (d) => {
+            const sx = d.source.x, sy = d.source.y;
+            const tx = d.target.x, ty = d.target.y;
+            const mx = (sx + tx) / 2;
+            const my = (sy + ty) / 2;
+            const ang = (Math.atan2(ty - sy, tx - sx) * 180) / Math.PI;
+            const rot = ang > 90 || ang < -90 ? ang + 180 : ang;
+            const nx = Math.cos(((rot - 90) * Math.PI) / 180);
+            const ny = Math.sin(((rot - 90) * Math.PI) / 180);
+            return `translate(${mx + nx * 10},${my + ny * 10}) rotate(${rot})`;
+          });
+          applyFilterVisibility(node, label, link, edgeLabel);
+        }
+
+        state.simulation.on("tick", ticked);
+        state.simulation.alpha(0.9).restart();
+        setTimeout(() => fitToView(false), 240);
+      }
+
+      function selectNode(id) {
+        state.selectedId = id;
+        state.selectedEdgeId = null;
+        const node = state.nodes.find((n) => n.id === id) || null;
+        renderDetails(node);
+        el.svg.select(".nodes").selectAll("path").attr("stroke-width", (d) => (d.id === state.selectedId ? 3.2 : 2.0)).attr("opacity", (d) => (state.selectedId && d.id !== state.selectedId ? 0.72 : 1));
+      }
+
+      function selectEdge(edgeId) {
+        state.selectedEdgeId = edgeId;
+        if (!edgeId) {
+          el.svg.select(".links").selectAll("line").attr("stroke-width", (d) => (d.kind === "relationship" ? 2.2 : 1.3));
+          return;
+        }
+        state.selectedId = null;
+        el.svg.select(".nodes").selectAll("path").attr("opacity", 1).attr("stroke-width", 2.0);
+        const edge = state.links.find((l) => l.id === edgeId) || null;
+        renderEdgeDetails(edge);
+        el.svg
+          .select(".links")
+          .selectAll("line")
+          .attr("stroke-width", (d) => (d.id === edgeId ? 3.6 : d.kind === "relationship" ? 2.0 : 1.3))
+          .attr("opacity", (d) => (edgeId && d.id !== edgeId && d.kind === "relationship" ? 0.55 : 0.95));
+      }
+
+      function fitToView(animate = true) {
+        const svg = el.svg;
+        if (!state.zoom || !state.nodes.length) return;
+        const { width, height } = svg.node().getBoundingClientRect();
+        const padding = 56;
+
+        const xs = state.nodes.map((n) => n.x).filter((v) => Number.isFinite(v));
+        const ys = state.nodes.map((n) => n.y).filter((v) => Number.isFinite(v));
+        if (!xs.length || !ys.length) return;
+        const minX = Math.min(...xs), maxX = Math.max(...xs);
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+        const dx = maxX - minX || 1;
+        const dy = maxY - minY || 1;
+        const scale = Math.min(2.4, Math.max(0.35, 0.92 * Math.min((width - padding) / dx, (height - padding) / dy)));
+        const tx = width / 2 - ((minX + maxX) / 2) * scale;
+        const ty = height / 2 - ((minY + maxY) / 2) * scale;
+
+        const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
+        const sel = animate ? svg.transition().duration(520) : svg;
+        sel.call(state.zoom.transform, t);
+      }
+
+      function basicValidate(doc, model, parts) {
+        const errors = [];
+        const datasets = parts?.datasets || [];
+        const dsNames = datasets.map((d) => d?.name).filter(Boolean);
+        const dsSet = new Set(dsNames);
+        if (dsSet.size !== dsNames.length) errors.push("datasets.name 存在重复");
+        for (const r of parts?.relationships || []) {
+          if (!r?.from || !r?.to) continue;
+          if (!dsSet.has(r.from)) errors.push(`relationship.from 引用未知 dataset：${r.from}`);
+          if (!dsSet.has(r.to)) errors.push(`relationship.to 引用未知 dataset：${r.to}`);
+        }
+        return { ok: errors.length === 0, errors };
+      }
+
+      async function loadFromText(yamlText, label = "已载入") {
+        try {
+          const doc = jsyaml.load(yamlText);
+          const { model } = normalizeOsiDoc(doc);
+          const parts = buildGraph(model);
+
+          state.rawYaml = yamlText;
+          state.doc = doc;
+          state.model = model;
+          state.nodes = parts.nodes;
+          state.links = parts.links;
+
+          renderLists(parts);
+          initGraph();
+
+          const basic = basicValidate(doc, model, parts);
+          if (basic.ok) {
+            setStatus("ok", `${label}：${model.name || "(unnamed)"} · datasets=${parts.datasets.length} · rel=${parts.relationships.length} · actions=${(parts.actions || []).length} · rules=${(parts.rules || []).length}`);
+          } else {
+            setStatus("bad", `${label}：基础校验未通过（${basic.errors.length}项）— ${basic.errors[0] || "unknown"}`);
+          }
+          selectNode(null);
+        } catch (e) {
+          console.error(e);
+          setStatus("bad", `导入失败：${e?.message || e}`);
+        }
+      }
+
+      el.fileInput.addEventListener("change", async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        await loadFromText(text, `已导入 ${file.name}`);
+        ev.target.value = "";
+      });
+
+      async function autoLoadSiblingYaml() {
+        // 说明：浏览器无法列目录，因此“自动检测”采用候选探测（best-effort）。
+        // 若通过 file:// 打开，fetch 很可能被浏览器安全策略阻止；此时会提示用户手动导入。
+
+        const qs = new URLSearchParams(location.search || "");
+        const qp = qs.get("yaml") || qs.get("model");
+
+        const candidates = [];
+        if (qp) {
+          candidates.push(qp.startsWith("./") ? qp : `./${qp}`);
+        }
+
+        const file = (location.pathname || "").split("/").pop() || "";
+        const base = file.replace(/\.html?$/i, "");
+        if (base) {
+          if (/_viewer$/i.test(base)) {
+            const b = base.replace(/_viewer$/i, "");
+            candidates.push(`./${b}.yaml`, `./${b}.yml`);
+          }
+          candidates.push(`./${base}.yaml`, `./${base}.yml`);
+        }
+
+        candidates.push(
+          "./semantic_model.yaml",
+          "./semantic_model.yml",
+          "./osi.yaml",
+          "./osi.yml",
+          "./ontology.yaml",
+          "./ontology.yml",
+          "./model.yaml",
+          "./model.yml"
+        );
+
+        const uniq = [...new Set(candidates.filter(Boolean))];
+        for (const url of uniq) {
+          try {
+            const res = await fetch(url, { cache: "no-store" });
+            if (!res.ok) continue;
+            const text = await res.text();
+            if (!/semantic_model\s*:/i.test(text)) continue;
+            await loadFromText(text, `自动发现并加载 ${url}`);
+            return true;
+          } catch (_) {}
+        }
+
+        return false;
+      }
+
+      el.loadDtpBtn.addEventListener("click", async () => {
+        setStatus("warn", "正在自动检测同目录 YAML…");
+        const ok = await autoLoadSiblingYaml();
+        if (!ok) {
+          const hint =
+            location.protocol === "file:"
+              ? "未能自动读取同目录 YAML（file:// 模式通常会阻止 fetch）。请点击“导入 OSI YAML”手动选择文件。"
+              : "未能自动发现同目录 YAML。请点击“导入 OSI YAML”手动选择文件，或把 YAML 命名为 <viewer同名>.yaml / semantic_model.yaml。";
+          setStatus("bad", hint);
+        }
+      });
+
+      el.fitBtn.addEventListener("click", () => fitToView(true));
+      el.clearSelectionBtn.addEventListener("click", () => selectNode(null));
+
+      el.exportBtn.addEventListener("click", () => {
+        if (!state.rawYaml) {
+          setStatus("bad", "当前没有载入任何 YAML，无法导出。");
+          return;
+        }
+        const blob = new Blob([state.rawYaml], { type: "text/yaml;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${state.model?.name || "semantic_model"}.yaml`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setStatus("ok", "已导出当前 YAML。");
+      });
+
+      document.querySelectorAll(".chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          document.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+          chip.classList.add("active");
+          state.filter = chip.dataset.filter;
+          if (state.simulation) state.simulation.alpha(0.001).restart();
+        });
+      });
+
+      (function boot() {
+        setStatus("warn", "启动中：正在检测同目录 OSI YAML…");
+        state.nodes = [{ id: "dataset:placeholder", kind: "dataset", label: "导入后渲染", description: "从左上角导入 OSI YAML", raw: {} }];
+        state.links = [];
+        initGraph();
+        setTimeout(async () => {
+          const ok = await autoLoadSiblingYaml();
+          if (!ok) {
+            const hint =
+              location.protocol === "file:"
+                ? "未检测到同目录 YAML（file:// 模式通常无法自动读取）。请点击“导入 OSI YAML”手动选择文件。"
+                : "未检测到同目录 YAML。你可以点击“导入 OSI YAML”手动选择，或把 YAML 命名为 <viewer同名>.yaml / semantic_model.yaml。";
+            setStatus("warn", hint);
+          }
+        }, 80);
+      })();
+    </script>
+  </body>
+</html>

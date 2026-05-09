@@ -1,0 +1,498 @@
+version: "0.1.2"
+
+semantic_model:
+  - name: sap_procurement_ontology
+    description: |
+      SAP Procure-to-Pay (P2P) 最小业务闭环本体模型：
+      Purchase Requisition → Purchase Order；包含物料/供应商主数据、PR/PO 生命周期与业务动作/规则。
+    ai_context:
+      instructions: |
+        默认口径：
+        - PR 金额口径以 estimated_amount 为准；PO 金额口径以 ordered_quantity * unit_price 为准（unit_price 字段未在最小模型中暴露，按需扩展）。
+        - 涉及"是否可下单/审批"的判定，必须先检查供应商 status 与 PR 审批状态。
+        - 紧急采购（is_urgent=true）必须走经理审批通道。
+      synonyms:
+        - 采购申请到采购订单
+        - PR2PO
+        - SAP P2P 最小闭环
+      examples:
+        - "帮我采购 100 个前挡风玻璃"
+        - "有哪些待审批的 PR？"
+        - "把这张已审批的 PR 转成 PO"
+        - "本月紧急采购占比是多少？"
+        - "哪些供应商目前被冻结？"
+
+    datasets:
+      - name: materials
+        source: sap.p2p.materials
+        primary_key: [material_id]
+        description: 物料主数据（采购对象的标准定义）
+        ai_context:
+          synonyms: ["物料", "Material"]
+        fields:
+          - name: material_id
+            type: String
+            description: 物料唯一编码（主键）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: materials.material_id }]
+          - name: material_name
+            type: String
+            description: 物料名称
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: materials.material_name }]
+          - name: category
+            type: String
+            description: 物料分类
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: materials.category }]
+
+      - name: suppliers
+        source: sap.p2p.suppliers
+        primary_key: [supplier_id]
+        description: 供应商主数据（采购合作方）
+        ai_context:
+          synonyms: ["供应商", "Vendor", "Supplier"]
+        fields:
+          - name: supplier_id
+            type: String
+            description: 供应商唯一编码（主键）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: suppliers.supplier_id }]
+          - name: supplier_name
+            type: String
+            description: 供应商名称
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: suppliers.supplier_name }]
+          - name: supplier_level
+            type: String
+            description: 供应商等级（如 A/B/C 或战略/普通）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: suppliers.supplier_level }]
+          - name: status
+            type: String
+            description: 供应商状态（ACTIVE / BLOCKED）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: suppliers.status }]
+
+      - name: plants
+        source: sap.p2p.plants
+        primary_key: [plant_id]
+        description: 工厂/厂区主数据（需求归属）
+        ai_context:
+          synonyms: ["工厂", "厂区", "Plant"]
+        fields:
+          - name: plant_id
+            type: String
+            description: 工厂唯一编码（主键）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: plants.plant_id }]
+          - name: plant_name
+            type: String
+            description: 工厂名称
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: plants.plant_name }]
+
+      - name: purchase_requisitions
+        source: sap.p2p.purchase_requisitions
+        primary_key: [pr_id]
+        description: |
+          采购申请单（PR）。生命周期：DRAFT → PENDING_APPROVAL → APPROVED → CONVERTED_TO_PO → CLOSED。
+        ai_context:
+          synonyms: ["采购申请", "PR", "Purchase Requisition"]
+        fields:
+          - name: pr_id
+            type: String
+            description: PR 唯一标识（主键）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.pr_id }]
+          - name: material_id
+            type: String
+            description: 请求采购的物料（外键 → materials.material_id）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.material_id }]
+          - name: requested_quantity
+            type: Number
+            description: 需求数量
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.requested_quantity }]
+          - name: plant_id
+            type: String
+            description: 需求工厂（外键 → plants.plant_id）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.plant_id }]
+          - name: estimated_amount
+            type: Number
+            description: 预估金额（用于预算校验）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.estimated_amount }]
+          - name: supplier_id
+            type: String
+            description: 推荐供应商（外键 → suppliers.supplier_id；可空）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.supplier_id }]
+          - name: is_urgent
+            type: Boolean
+            description: 是否紧急采购
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.is_urgent }]
+          - name: status
+            type: String
+            description: PR 当前状态（DRAFT/PENDING_APPROVAL/APPROVED/CONVERTED_TO_PO/CLOSED）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.status }]
+          - name: created_at
+            type: DateTime
+            description: PR 创建时间
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_requisitions.created_at }]
+            dimension: { is_time: true }
+
+      - name: purchase_orders
+        source: sap.p2p.purchase_orders
+        primary_key: [po_id]
+        description: |
+          采购订单（PO）。生命周期：DRAFT → RELEASED → PARTIALLY_RECEIVED → COMPLETED。
+        ai_context:
+          synonyms: ["采购订单", "PO", "Purchase Order"]
+        fields:
+          - name: po_id
+            type: String
+            description: PO 唯一标识（主键）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.po_id }]
+          - name: pr_id
+            type: String
+            description: 来源 PR（外键 → purchase_requisitions.pr_id）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.pr_id }]
+          - name: supplier_id
+            type: String
+            description: 供应商（外键 → suppliers.supplier_id）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.supplier_id }]
+          - name: ordered_quantity
+            type: Number
+            description: 采购数量
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.ordered_quantity }]
+          - name: delivery_date
+            type: Date
+            description: 交付日期
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.delivery_date }]
+            dimension: { is_time: true }
+          - name: status
+            type: String
+            description: PO 当前状态（DRAFT/RELEASED/PARTIALLY_RECEIVED/COMPLETED）
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.status }]
+          - name: released_at
+            type: DateTime
+            description: PO 下达时间
+            expression:
+              dialects: [{ dialect: ANSI_SQL, expression: purchase_orders.released_at }]
+            dimension: { is_time: true }
+
+    relationships:
+      - name: pr_to_materials
+        from: purchase_requisitions
+        to: materials
+        from_columns: [material_id]
+        to_columns: [material_id]
+        ai_context:
+          synonyms: ["PR requires Material", "采购申请的物料"]
+
+      - name: pr_to_suppliers
+        from: purchase_requisitions
+        to: suppliers
+        from_columns: [supplier_id]
+        to_columns: [supplier_id]
+        ai_context:
+          synonyms: ["PR suggests Supplier", "PR 推荐供应商"]
+
+      - name: pr_to_plants
+        from: purchase_requisitions
+        to: plants
+        from_columns: [plant_id]
+        to_columns: [plant_id]
+        ai_context:
+          synonyms: ["PR 归属工厂"]
+
+      - name: po_to_pr
+        from: purchase_orders
+        to: purchase_requisitions
+        from_columns: [pr_id]
+        to_columns: [pr_id]
+        ai_context:
+          synonyms: ["PO fulfills PR", "采购订单来源采购申请"]
+
+      - name: po_to_suppliers
+        from: purchase_orders
+        to: suppliers
+        from_columns: [supplier_id]
+        to_columns: [supplier_id]
+        ai_context:
+          synonyms: ["PO issued to Supplier", "采购订单面向供应商"]
+
+    metrics:
+      - name: pr_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT purchase_requisitions.pr_id)
+        description: 采购申请单数量（全口径）
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {"depends_on_datasets":["purchase_requisitions"]}
+
+      - name: approved_pr_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: |
+                COUNT(DISTINCT CASE WHEN purchase_requisitions.status = 'APPROVED' THEN purchase_requisitions.pr_id END)
+        description: 已审批 PR 数量（status='APPROVED'）
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {"depends_on_datasets":["purchase_requisitions"]}
+
+      - name: urgent_pr_ratio
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: |
+                SUM(CASE WHEN purchase_requisitions.is_urgent = TRUE THEN 1 ELSE 0 END)
+                * 1.0 / NULLIF(COUNT(purchase_requisitions.pr_id), 0)
+        description: 紧急 PR 占比（is_urgent=true 的 PR / 全部 PR）
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {"depends_on_datasets":["purchase_requisitions"]}
+
+      - name: pr_estimated_amount_total
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(purchase_requisitions.estimated_amount)
+        description: PR 预估金额合计（用于预算趋势观察）
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {"depends_on_datasets":["purchase_requisitions"]}
+
+      - name: po_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT purchase_orders.po_id)
+        description: 采购订单数量（全口径）
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {"depends_on_datasets":["purchase_orders"]}
+
+      - name: blocked_supplier_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: |
+                COUNT(DISTINCT CASE WHEN suppliers.status = 'BLOCKED' THEN suppliers.supplier_id END)
+        description: 当前被冻结的供应商数量
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {"depends_on_datasets":["suppliers"]}
+
+    behavior:
+      namespace: "SAP_P2P"
+      behavior_layer_version: "0.1"
+      metadata:
+        owner: "procurement_platform"
+        labels: [p2p, pr_to_po, governance]
+
+      actions:
+        - id: pr/create
+          name: 创建采购申请
+          description: |
+            业务人员或 Agent 发起 PR；初始 status=DRAFT，受预算与供应商准入规则约束。
+          kind: command
+          operation: create
+          entity_name: purchase_requisitions
+          applies_to:
+            entity: dataset
+            dataset: purchase_requisitions
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required: [material_id, requested_quantity, plant_id]
+              properties:
+                material_id: { type: string, description: "物料编码（必填）" }
+                requested_quantity: { type: number, minimum: 0, description: "需求数量（>0）" }
+                plant_id: { type: string, description: "需求工厂" }
+                supplier_id: { type: string, description: "推荐供应商（可选）" }
+                is_urgent: { type: boolean, default: false }
+                estimated_amount: { type: number, minimum: 0 }
+            output_schema:
+              type: object
+              additionalProperties: true
+              properties:
+                pr_id: { type: string }
+                status: { type: string, enum: ["DRAFT"] }
+          labels: [procurement, pr, create]
+          synonyms: ["发起采购申请", "新建PR", "创建采购需求"]
+
+        - id: pr/approve
+          name: 审批采购申请
+          description: |
+            审批 PR；status 由 PENDING_APPROVAL → APPROVED；紧急 PR 需经理审批。
+          kind: command
+          operation: approve
+          entity_name: purchase_requisitions
+          applies_to:
+            entity: dataset
+            dataset: purchase_requisitions
+            selectors:
+              field_names: [status]
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required: [pr_id, approver_id, decision]
+              properties:
+                pr_id: { type: string }
+                approver_id: { type: string }
+                decision: { type: string, enum: ["APPROVED", "REJECTED"] }
+                reason: { type: string }
+            output_schema:
+              type: object
+              additionalProperties: true
+              properties:
+                pr_id: { type: string }
+                status: { type: string, enum: ["APPROVED", "REJECTED"] }
+          labels: [procurement, pr, approval]
+          synonyms: ["审批PR", "批准采购申请"]
+
+        - id: po/create_from_pr
+          name: 由已审批 PR 转换为 PO
+          description: |
+            将 status=APPROVED 的 PR 转换为正式 PO，并写回 PR.status=CONVERTED_TO_PO；
+            供应商若为 BLOCKED 则不允许执行。
+          kind: command
+          operation: create
+          entity_name: purchase_orders
+          applies_to:
+            entity: dataset
+            dataset: purchase_orders
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required: [pr_id, supplier_id, ordered_quantity, delivery_date]
+              properties:
+                pr_id: { type: string }
+                supplier_id: { type: string }
+                ordered_quantity: { type: number, minimum: 0 }
+                delivery_date: { type: string, format: date }
+            output_schema:
+              type: object
+              additionalProperties: true
+              properties:
+                po_id: { type: string }
+                status: { type: string, enum: ["DRAFT"] }
+          labels: [procurement, po, conversion]
+          synonyms: ["PR 转 PO", "下达采购订单"]
+
+        - id: suppliers/list_active
+          name: 列出可下单供应商
+          description: 列出 status=ACTIVE 的供应商，用于推荐和下单候选。
+          kind: query
+          operation: list
+          entity_name: suppliers
+          applies_to:
+            entity: dataset
+            dataset: suppliers
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              properties:
+                category: { type: string, description: "可按物料分类过滤" }
+                top_k: { type: integer, minimum: 1, default: 20 }
+          labels: [supplier, query]
+          synonyms: ["可用供应商", "活跃供应商列表"]
+
+      rules:
+        - id: sap_p2p/rule_budget_check
+          name: 预算超限校验
+          description: PR.estimated_amount 不得超过当前可用预算（available_budget 由外部预算服务给出）。
+          severity: error
+          when:
+            entity: dataset
+            dataset: purchase_requisitions
+            selectors:
+              field_names: [estimated_amount]
+          constraint:
+            type: filter
+            field: purchase_requisitions.estimated_amount
+            check: "estimated_amount <= available_budget"
+          message: "采购金额超过可用预算，禁止创建/审批 PR。"
+          remediation: "削减需求数量、申请预算追加，或拆分多期采购。"
+          labels: [budget, governance, blocking]
+
+        - id: sap_p2p/rule_urgent_pr_requires_manager_approval
+          name: 紧急采购需经理审批
+          description: is_urgent=true 的 PR 必须由经理及以上权限审批。
+          severity: warn
+          when:
+            entity: dataset
+            dataset: purchase_requisitions
+          if:
+            all_of:
+              - "purchase_requisitions.is_urgent = TRUE"
+          constraint:
+            type: security
+            requires: ["approver.role IN ('manager','director')"]
+            applies_to:
+              action_id: pr/approve
+          message: "紧急采购申请必须经理及以上审批。"
+          remediation: "升级到经理审批通道（pr/approve 时传入 approver_id 为经理）。"
+          labels: [approval, urgent, segregation_of_duties]
+
+        - id: sap_p2p/rule_blocked_supplier_guard
+          name: 冻结供应商不可下单
+          description: status=BLOCKED 的供应商不能被推荐为 PR.supplier_id 或用于 po/create_from_pr。
+          severity: error
+          when:
+            entity: dataset
+            dataset: suppliers
+            selectors:
+              field_names: [status]
+          constraint:
+            type: security
+            forbidden: ["suppliers.status = 'BLOCKED'"]
+            applies_to:
+              action_id: po/create_from_pr
+          message: "供应商当前处于 BLOCKED 状态，禁止用于 PR 推荐或 PO 下达。"
+          remediation: "走供应商解冻流程或改选其他 ACTIVE 供应商。"
+          labels: [supplier, governance, blocking]
+
+        - id: sap_p2p/rule_pr_must_be_approved_for_po
+          name: 仅已审批 PR 可转 PO
+          description: 仅当 PR.status=APPROVED 才允许执行 po/create_from_pr。
+          severity: error
+          when:
+            entity: dataset
+            dataset: purchase_requisitions
+            selectors:
+              field_names: [status]
+          constraint:
+            type: filter
+            requires: ["purchase_requisitions.status = 'APPROVED'"]
+            applies_to:
+              action_id: po/create_from_pr
+          message: "目标 PR 未审批通过，不能转 PO。"
+          remediation: "先执行 pr/approve 通过审批，再执行 po/create_from_pr。"
+          labels: [lifecycle, governance, blocking]
