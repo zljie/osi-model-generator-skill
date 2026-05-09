@@ -555,7 +555,7 @@
             if (!data.behavior_layer_version || !data.namespace) continue;
             namespace = namespace || data.namespace;
 
-            const a = data.actions || data.action_types || [];
+            const a = data.actions || [];
             const r = data.rules || [];
             if (Array.isArray(a)) actions.push(...a.filter((x) => x && typeof x === "object"));
             if (Array.isArray(r)) rules.push(...r.filter((x) => x && typeof x === "object"));
@@ -628,7 +628,7 @@
         // v0.1.2 first-class behavior + v0.1.1 legacy embedding in dataset.custom_extensions
         const embedded = extractEmbeddedBehavior(datasets);
         const actions = [
-          ...(behavior ? (behavior.actions || behavior.action_types || []) : []),
+          ...(behavior ? (behavior.actions || []) : []),
           ...(embedded.actions || []),
         ];
         const rules = [

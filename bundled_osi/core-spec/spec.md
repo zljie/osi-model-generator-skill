@@ -206,6 +206,7 @@ Fields represent row-level attributes that can be used for grouping, filtering, 
 | Field               | Type          | Required | Description                                        |
 | ------------------- | ------------- | -------- | -------------------------------------------------- |
 | `name`              | string        | Yes      | Unique identifier for the field within the dataset |
+| `type`              | enum          | No       | Logical property type, anchor for DB/engine type mapping. Allowed: `String`, `Number`, `Integer`, `Boolean`, `Date`, `DateTime`, `Time`, `JSON`, `Array` |
 | `expression`        | object        | Yes      | Expression definition with dialect support         |
 | `dimension`         | object        | No       | Dimension metadata (e.g., `is_time` flag)          |
 | `label`             | string        | No       | Label for categorization                           |
@@ -244,6 +245,7 @@ expression:
 
 ```yaml
 - name: customer_id
+  type: String
   expression:
     dialects:
       - dialect: ANSI_SQL
@@ -252,6 +254,22 @@ expression:
   dimension: 
     is_time: false
 ```
+
+### Property Types (`type`)
+
+The optional `type` field declares a **logical/abstract property type** for the field. It is intentionally engine-agnostic and acts as an anchor for downstream DB/engine type mapping (e.g. `String` → `VARCHAR`/`TEXT`, `Number` → `DECIMAL`/`DOUBLE`, `DateTime` → `TIMESTAMP`).
+
+| Value      | Maps to (typical)                       |
+| ---------- | --------------------------------------- |
+| `String`   | varchar / text / nvarchar               |
+| `Number`   | numeric / decimal / float / double      |
+| `Integer`  | int / bigint / smallint                 |
+| `Boolean`  | boolean / bit                           |
+| `Date`     | date                                    |
+| `DateTime` | timestamp / datetime / timestamptz      |
+| `Time`     | time                                    |
+| `JSON`     | json / jsonb / variant                  |
+| `Array`    | array<...> / list / repeated            |
 
 **Computed Field:**
 
@@ -370,8 +388,7 @@ This specification supports two equivalent placements:
 |------------------------|--------|----------|-------------|
 | `namespace`            | string | Yes      | Namespace/group for actions and rules (e.g. `SAP_P2P`) |
 | `behavior_layer_version` | string | Yes    | Version for behavior schema evolution |
-| `actions`              | array  | No*      | Preferred list of supported actions (`actions` or `action_types` required) |
-| `action_types`         | array  | No*      | Legacy alias of `actions` (for backwards compatibility) |
+| `actions`              | array  | Yes      | List of supported actions (allowed empty array) |
 | `rules`                | array  | Yes      | Declarative constraints/guards for planning and governance |
 | `metadata`             | object | No       | Governance metadata (owner/tags/last_updated, etc.) |
 

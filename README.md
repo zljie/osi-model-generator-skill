@@ -81,7 +81,7 @@ python bundled_osi/validation/validate.py references/examples/restaurant_ops_min
 
 - "生成 OSI 模型"、"按 OSI 规范输出 YAML"、"把这个语义模型改成 OSI"
 - "根据业务场景建模 semantic_model"、"补齐 datasets/relationships/metrics"
-- "为语义模型补 action_types / rules（行为层）"
+- "为语义模型补 actions / rules（行为层）"
 - "生成本体可视化页面"、"OSI 图谱展示"、"D3 本体图谱"
 
 Skill 的工作流（详见 `SKILL.md`）：
@@ -105,7 +105,8 @@ Skill 的工作流（详见 `SKILL.md`）：
 - `SemanticModel` / `Dataset` / `Field` / `Relationship` / `Metric` 均 `additionalProperties: false`，扩展统一走 `custom_extensions[]` 或 `semantic_model.behavior`
 - `Expression.dialects` 至少 1 项；`DialectExpression` 仅 `dialect` + `expression`
 - `CustomExtension` 仅 `vendor_name`（枚举：`COMMON`/`SNOWFLAKE`/`SALESFORCE`/`DBT`/`DATABRICKS`）+ `data`（**JSON 字符串**）
-- `behavior`：`namespace` / `behavior_layer_version` / `rules` 必填；`actions` 与 `action_types` 至少其一
+- `behavior`：`namespace` / `behavior_layer_version` / `actions` / `rules` 都必填（均允许空数组；旧别名 `action_types` 已移除）
+- `Field.type`（可选）：逻辑属性类型枚举，作为 DB 映射锚点：`String` / `Number` / `Integer` / `Boolean` / `Date` / `DateTime` / `Time` / `JSON` / `Array`
 
 ---
 

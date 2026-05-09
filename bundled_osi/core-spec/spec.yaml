@@ -166,6 +166,10 @@ fields:
   # Required: Unique identifier for the field within the logical dataset
   - name: string
 
+    # Optional: Logical property type (anchor for downstream DB/engine type mapping)
+    # Allowed values: String | Number | Integer | Boolean | Date | DateTime | Time | JSON | Array
+    type: string
+
     # Required: Expression definition with dialect support
     # Supports multiple SQL dialects for cross-platform compatibility
     # Each field can have expressions in different dialects for portability
@@ -240,14 +244,10 @@ behavior:
   # Optional: Metadata for governance/audit
   metadata: {}
 
-  # Preferred: List of actions supported by this semantic model
+  # Required: List of actions supported by this semantic model (allowed empty array)
   actions: []
 
-  # Legacy alias (compat): actions MAY also be provided as action_types
-  # New models SHOULD use actions.
-  action_types: []
-
-  # Optional: Declarative rules/constraints for planning and validation
+  # Required: Declarative rules/constraints for planning and validation (allowed empty array)
   rules: []
 
 ---

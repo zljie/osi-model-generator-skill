@@ -96,11 +96,7 @@
       "type": "object",
       "description": "Optional behavior layer for deterministic action planning and attribution (actions/rules/effects).",
       "additionalProperties": true,
-      "required": ["namespace", "behavior_layer_version", "rules"],
-      "anyOf": [
-        { "required": ["actions"] },
-        { "required": ["action_types"] }
-      ],
+      "required": ["namespace", "behavior_layer_version", "actions", "rules"],
       "properties": {
         "namespace": { "type": "string", "minLength": 1 },
         "behavior_layer_version": { "type": "string", "minLength": 1 },
@@ -109,16 +105,26 @@
           "type": "array",
           "items": { "$ref": "#/$defs/BehaviorAction" }
         },
-        "action_types": {
-          "type": "array",
-          "description": "Legacy alias of actions.",
-          "items": { "$ref": "#/$defs/BehaviorAction" }
-        },
         "rules": {
           "type": "array",
           "items": { "$ref": "#/$defs/BehaviorRule" }
         }
       }
+    },
+    "PropertyType": {
+      "type": "string",
+      "description": "Logical/abstract data type of a field, used as an anchor for downstream DB/engine type mapping.",
+      "enum": [
+        "String",
+        "Number",
+        "Integer",
+        "Boolean",
+        "Date",
+        "DateTime",
+        "Time",
+        "JSON",
+        "Array"
+      ]
     },
     "BehaviorAction": {
       "type": "object",
@@ -223,6 +229,10 @@
         "name": {
           "type": "string",
           "description": "Unique identifier for the field within the dataset"
+        },
+        "type": {
+          "$ref": "#/$defs/PropertyType",
+          "description": "Logical property type (String/Number/Integer/Boolean/Date/DateTime/Time/JSON/Array). Anchor for DB/engine type mapping."
         },
         "expression": {
           "$ref": "#/$defs/Expression"

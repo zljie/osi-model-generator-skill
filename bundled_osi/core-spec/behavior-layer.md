@@ -1,7 +1,7 @@
-# OSI 扩展规范：行为层（Action Types & Rules）
+# OSI 扩展规范：行为层（Actions & Rules）
 
 **适用范围：** OSI Core v0.1.2 的补充扩展规范  
-**目标：** 在不破坏 OSI Core 兼容性的前提下，引入“可执行语义（behavior layer）”，并将 **actions/action_types** 与 **rules** 两个节点结构化分离，用于确定性 action planning、归因解释（what changed/why）与工程化校验。
+**目标：** 在不破坏 OSI Core 兼容性的前提下，引入“可执行语义（behavior layer）”，并将 **actions** 与 **rules** 两个节点结构化分离，用于确定性 action planning、归因解释（what changed/why）与工程化校验。
 
 > OSI Core 规范见：[/core-spec/spec.md](file:///Users/johnson_mac/code/OSI/core-spec/spec.md)
 
@@ -32,7 +32,6 @@ datasets:
             "namespace": "PALANTIR",
             "behavior_layer_version": "0.1",
             "actions": [],
-            "action_types": [],
             "rules": []
           }
 ```
@@ -56,23 +55,21 @@ OSI Core v0.1.1 的 `vendor_name` 是枚举（`COMMON/SNOWFLAKE/SALESFORCE/DBT/D
 |---|---|---:|---|
 | `namespace` | string | 是 | 命名空间（如 `PALANTIR` 或组织/平台名） |
 | `behavior_layer_version` | string | 是 | 行为层扩展版本（如 `0.1`） |
-| `actions` | array | 否* | 推荐：动作定义列表（允许空数组；`actions` 或 `action_types` 至少一个存在） |
-| `action_types` | array | 否* | 兼容别名：等价于 `actions`（legacy） |
+| `actions` | array | 是 | 动作定义列表（允许空数组） |
 | `rules` | array | 是 | 规则定义列表（允许空数组） |
 | `metadata` | object | 否 | 可选元信息（owner/tags/last_updated 等） |
 
 约束：
-- `rules` 必须存在（允许为空数组）
-- `actions` 与 `action_types` 至少提供一个（允许为空数组）
+- `actions` 与 `rules` 必须存在（允许为空数组）
 - 未识别字段应被视为“保留字段”，导入导出时不得丢失（便于演进）
 
 ---
 
-## 3. Action Types（动作类型节点）
+## 3. Actions（动作节点）
 
 ### 3.1 目的
 
-ActionType 用于描述：对当前 dataset（或其 field/metric/relationship）**可执行的标准化动作**。  
+Action 用于描述：对当前 dataset（或其 field/metric/relationship）**可执行的标准化动作**。  
 典型用途：
 - Agent/工具选择可执行能力（“能做什么”）
 - 参数化调用（输入/输出 schema）
@@ -99,7 +96,7 @@ ActionType 用于描述：对当前 dataset（或其 field/metric/relationship�
 
 ### 3.4 面向传统后端（ORM/CRUD）的推荐扩展字段
 
-如果你希望 `action_types` 能承载“传统开发后端中的 ORM 对象管理能力”，推荐为 ActionType 增加以下字段（**非 OSI Core**，属于行为层扩展内部字段，向后兼容）：
+如果你希望 `actions` 能承载“传统开发后端中的 ORM 对象管理能力”，推荐为 Action 增加以下字段（**非 OSI Core**，属于行为层扩展内部字段，向后兼容）：
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -114,7 +111,7 @@ ActionType 用于描述：对当前 dataset（或其 field/metric/relationship�
 - 写操作统一为 `kind: command`；读操作统一为 `kind: query`。
 - “列表/检索”与“读取单条”分开：`list/search` vs `read`。
 
-### 3.5 CRUD ActionType 目录（建议每个聚合至少具备）
+### 3.5 CRUD Action 目录（建议每个聚合至少具备）
 
 以下是推荐的“最小 CRUD 套件”，适用于多数业务对象：
 
@@ -143,7 +140,7 @@ ActionType 用于描述：对当前 dataset（或其 field/metric/relationship�
 - `kind` 一般为 `command`
 - 在 `io_schema.input_schema` 中明确必填参数与约束，尽量 `additionalProperties: false`
 
-这能让你的 action_types 成为“可检索、可计划、可校验”的接口目录（更接近 Palantir Ontology 的 action types），同时不破坏 OSI Core 的可移植性。
+这能让你的 actions 成为“可检索、可计划、可校验”的接口目录（更接近 Palantir Ontology 的 action types），同时不破坏 OSI Core 的可移植性。
 
 ### 3.3 applies_to（可选）
 

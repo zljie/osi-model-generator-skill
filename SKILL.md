@@ -29,7 +29,7 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 **触发词**（任一命中即激活）：
 - 「生成 OSI 模型」「按 OSI 规范输出 YAML」「把这个语义模型改成 OSI」
 - 「根据业务场景建模 semantic_model」「补齐 datasets/relationships/metrics」
-- 「为语义模型补 action_types / rules（行为层）」  
+- 「为语义模型补 actions / rules（行为层）」  
 - 「生成本体可视化页面」「OSI 图谱展示」「本体结构 HTML」「D3 本体图谱」  
 
 ---
@@ -44,7 +44,7 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 
 | 放置方式 | 适用场景 | 关键约束 |
 |---|---|---|
-| **A. First-class（推荐）：`semantic_model.behavior`** | 新建模型；目标工具链已支持 v0.1.2 behavior 节点 | 必须满足 Behavior schema：`namespace` / `behavior_layer_version` / `rules` 必填，且 `actions` 与 `action_types` 至少一个存在 |
+| **A. First-class（推荐）：`semantic_model.behavior`** | 新建模型；目标工具链已支持 v0.1.2 behavior 节点 | 必须满足 Behavior schema：`namespace` / `behavior_layer_version` / `actions` / `rules` 都必填（均允许空数组） |
 | **B. Legacy embedding：`custom_extensions[].data` 内嵌 JSON** | 与既有模型/老 UI 兼容（其只识别 custom_extensions 内的 behavior 字符串） | `vendor_name` 必须取自枚举（推荐 `COMMON`），`data` 为 JSON 字符串；OSI Core 节点上不出现未在 schema 定义的字段 |
 
 **默认策略**：
@@ -63,7 +63,7 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 | **身份（Identity）** | 每类对象用什么唯一键？跨系统如何对齐？ | primary_key / unique_keys（必要时用桥表 dataset） |
 | **关系（Graph）** | 端到端链路怎么串起来？（PR→PO→GR→IV→Pay；订单→明细→菜品→配方→原料→库存批次…） | relationships |
 | **信号/指标（Signals/KPI）** | 哪些指标驱动“优先级/分派/处置”？口径是什么？ | metrics + ai_context.instructions |
-| **动作（Actions）** | 哪些动作会改变对象状态/推进流程？（分派/冻结/审批/回写/创建任务…） | behavior.actions（或 legacy action_types） |
+| **动作（Actions）** | 哪些动作会改变对象状态/推进流程？（分派/冻结/审批/回写/创建任务…） | behavior.actions |
 | **影响（Effects）** | 动作会对哪些字段/指标产生可解释的变化？ | actions[].effects（用于归因与后续规划门禁） |
 | **门禁（Rules）** | 哪些情况必须阻止/告警/审批？（Blocked 供应商不可下单；异常需复核…） | behavior.rules（severity/when/constraint/message/remediation） |
 | **回流（Feedback）** | 执行结果写回哪里，改进下一轮？ | actions + effects（回写对象/事件/状态） |
@@ -87,7 +87,7 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 - 需要的指标（metrics）与默认过滤口径（例如 “默认仅已支付订单”）
 
 4) **（可选）可执行能力**
-- 需要哪些动作（actions/action_types）：读（query）还是写（command）
+- 需要哪些动作（actions）：读（query）还是写（command）
 - 需要哪些治理/安全/口径规则（rules）：命名、join、过滤、安全、质量……
 
 > 如果用户只给“场景描述”，你要先做**建模假设**（写在说明里），并用最小字段集把模型跑通。
@@ -136,7 +136,7 @@ semantic_model:
 1) **name**：逻辑名（snake_case），面向业务对象/事实粒度  
 2) **source**：物理表/视图名（`db.schema.table`）  
 3) **primary_key / unique_keys**：至少填一个（能支撑 relationship 的 `to_columns`）  
-4) **fields**：只放“可用于分组/过滤/指标表达式”的字段；每个字段必须有 `expression.dialects[]`：
+4) **fields**：只放“可用于分组/过滤/指标表达式”的字段；每个字段必须有 `expression.dialects[]`，并**强烈建议**填 `type`（属性类型锚点，方便后续 DB 映射）：
 
 ```yaml
   - name: orders
@@ -144,12 +144,20 @@ semantic_model:
     primary_key: [order_id]
     fields:
       - name: order_id
+        type: String
         expression:
           dialects:
             - dialect: ANSI_SQL
               expression: orders.order_id
         description: 订单ID
+      - name: total_amount
+        type: Number
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: orders.total_amount
       - name: order_time
+        type: DateTime
         expression:
           dialects:
             - dialect: ANSI_SQL
@@ -161,6 +169,27 @@ semantic_model:
 **字段表达式约定**：
 - 统一使用 `dataset_alias.column`（alias 与 dataset.name 一致），便于人读与工具生成 join SQL
 - 不要在 field 里写聚合（聚合应放 metrics）
+
+**Field `type` 约定（属性类型，DB 映射锚点）**：
+
+`type` 是可选枚举，为字段声明**逻辑/抽象数据类型**，与 SQL 引擎解耦；下游工具/DDL 生成器据此映射到具体物理类型：
+
+| `type`     | 典型物理类型映射                          | 适用场景 |
+| ---------- | ---------------------------------------- | --- |
+| `String`   | varchar / text / nvarchar                | ID、名称、枚举码、自由文本 |
+| `Number`   | numeric / decimal / float / double       | 金额、比率、连续型度量 |
+| `Integer`  | int / bigint / smallint                  | 计数、整数 ID、年龄 |
+| `Boolean`  | boolean / bit                            | 标志位 |
+| `Date`     | date                                     | 仅日期（无时分秒） |
+| `DateTime` | timestamp / datetime / timestamptz       | 事件发生时间、审计时间 |
+| `Time`     | time                                     | 仅时间（无日期） |
+| `JSON`     | json / jsonb / variant                   | 半结构化嵌套对象 |
+| `Array`    | array&lt;...&gt; / list / repeated       | 多值字段 |
+
+**最佳实践**：
+- 时间字段同时声明 `type: DateTime`（或 `Date`/`Time`）与 `dimension.is_time: true`
+- 主键/外键字段务必声明 `type`（多为 `String` 或 `Integer`），让关系两端类型一致
+- 计算字段（`first_name || ' ' || last_name`）按表达式输出类型声明（例如 `String`）
 
 ---
 
@@ -264,8 +293,8 @@ behavior:
 ```
 
 **Behavior schema 的硬约束（必须满足，否则 validate.py 不过）**：
-- `behavior.namespace`、`behavior.behavior_layer_version`、`behavior.rules` 必填（`rules` 允许空数组）
-- `behavior.actions` 与 `behavior.action_types` 至少存在一个（推荐用 `actions`；`action_types` 仅作 legacy 别名）
+- `behavior.namespace`、`behavior.behavior_layer_version`、`behavior.actions`、`behavior.rules` 都必填（`actions`/`rules` 均允许空数组）
+- ⚠️ 旧别名 `action_types` 已从 schema 中移除，不再被识别；老模型需重命名为 `actions`
 - 每个 action 必须有 `id` 与 `title`；`kind` 仅允许 `command`/`query`；`idempotency` 仅允许 `idempotent`/`non_idempotent`/`unknown`
 - 每个 effect 必须有 `entity`（`dataset`/`field`/`metric`/`relationship`）与 `mode`（`read`/`write`/`derive`）
 - 每个 rule 必须有 `id` / `title` / `severity`（`error`/`warn`/`info`）/ `when` / `constraint` / `message`
@@ -288,7 +317,6 @@ custom_extensions:
         "namespace": "RESTAURANT",
         "behavior_layer_version": "0.1",
         "actions": [],
-        "action_types": [],
         "rules": []
       }
 ```

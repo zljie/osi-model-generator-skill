@@ -4,11 +4,7 @@
   "title": "OSI Behavior Layer Extension",
   "type": "object",
   "additionalProperties": true,
-  "required": ["namespace", "behavior_layer_version", "rules"],
-  "anyOf": [
-    { "required": ["actions"] },
-    { "required": ["action_types"] }
-  ],
+  "required": ["namespace", "behavior_layer_version", "actions", "rules"],
   "properties": {
     "namespace": { "type": "string", "minLength": 1 },
     "behavior_layer_version": { "type": "string", "minLength": 1 },
@@ -23,12 +19,7 @@
     },
     "actions": {
       "type": "array",
-      "description": "Preferred: list of actions supported by this semantic model. (Alias of legacy action_types)",
-      "items": { "$ref": "#/$defs/actionType" }
-    },
-    "action_types": {
-      "type": "array",
-      "description": "Legacy alias of actions. New models SHOULD use actions.",
+      "description": "List of actions supported by this semantic model.",
       "items": { "$ref": "#/$defs/actionType" }
     },
     "rules": {
