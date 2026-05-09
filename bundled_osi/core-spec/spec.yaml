@@ -186,8 +186,8 @@ fields:
       # Used for time-series analysis and temporal filtering
       is_time: boolean
 
-    # Optional: Label for categorization (e.g., "filter")
-    label: string
+    # Optional: Tags/labels for categorization (e.g., ["filter", "pii"])
+    labels: []
 
     # Optional: Human-readable description of the field
     description: string
@@ -232,7 +232,7 @@ metrics:
 
 ---
 # Behavior Schema (Optional)
-# A vendor-agnostic behavior layer for deterministic action planning and attribution.
+# A vendor-agnostic behavior layer for deterministic action planning and governance.
 # This is intentionally separate from SQL/query generation: actions can map to APIs, workflows, or tools.
 behavior:
   # Required: Namespace for grouping actions/rules (e.g. "SAP_P2P", "CRM")
@@ -259,28 +259,7 @@ actions:
     kind: "command"|"query"
     operation: string         # free-form, e.g. "block"|"unblock"|"create"|"analyze"
     entity_name: string       # dataset name or conceptual entity
-    idempotency: "idempotent"|"non_idempotent"|"unknown"
     applies_to: {}            # optional selectors (dataset/field/metric/relationship)
     io_schema: {}             # optional input/output JSON schema for tool execution
-    effects: []               # optional: machine-readable impact annotations
-    tags: []
+    labels: []
     synonyms: []
-
----
-# Effect Schema (within action.effects)
-# Used for:
-# - Planning: understand state transitions and prohibited/required follow-up actions
-# - Attribution: explain "what changed/why" for fields/datasets
-effects:
-  - entity: "dataset"|"field"|"metric"|"relationship"
-    mode: "read"|"write"|"derive"
-    impact_type: "state_transition"|"master_data_mutation"|"transactional_write"|"derived_metric_change"|"other"
-    selectors:
-      dataset: string
-      field_names: []
-    transition:
-      from: string
-      to: string
-    set_value: string
-    confidence: "guaranteed"|"likely"|"unknown"
-    notes: string

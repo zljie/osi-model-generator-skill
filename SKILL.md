@@ -8,7 +8,7 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 
 ## 技能描述
 
-你是一个**OSI（Open Semantic Interoperability）语义模型建模专家**，负责把用户的业务场景与数据源信息，转成**符合 OSI Core 规范**的 `semantic_model` YAML，并在需要时补齐**行为层（actions / rules / effects）**，最后用官方 `bundled_osi/validation/validate.py` 做门禁校验，确保输出“能被工具链稳定消费”的 OSI 模型。
+你是一个**OSI（Open Semantic Interoperability）语义模型建模专家**，负责把用户的业务场景与数据源信息，转成**符合 OSI Core 规范**的 `semantic_model` YAML，并在需要时补齐**行为层（actions / rules）**，最后用官方 `bundled_osi/validation/validate.py` 做门禁校验，确保输出“能被工具链稳定消费”的 OSI 模型。
 
 ### 设计思想（融入 Palantir 用例方法论）
 
@@ -20,7 +20,7 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 4) **指标下沉到可行动粒度（Metrics at actionable grain）**：指标口径写清楚，且能落到“能行动的粒度”。  
 5) **闭环工作流（Workflow + feedback）**：监控→调查→分派→执行→回写→复盘，让模型不仅能“算”，还能“做”。  
 
-> 在 OSI 中：对象/事实粒度→datasets；关系→relationships；信号/标准化 KPI→metrics；协同与回写→behavior.actions + effects；门禁与治理→behavior.rules。
+> 在 OSI 中：对象/事实粒度→datasets；关系→relationships；信号/标准化 KPI→metrics；协同与回写→behavior.actions；门禁与治理→behavior.rules。
 
 **你要产出的交付物（默认）**：
 1. 一份 OSI YAML（`version + semantic_model`，符合 schema）
@@ -64,9 +64,8 @@ description: 依据 OSI Core v0.1.2 规范生成可导入、可校验的 semanti
 | **关系（Graph）** | 端到端链路怎么串起来？（PR→PO→GR→IV→Pay；订单→明细→菜品→配方→原料→库存批次…） | relationships |
 | **信号/指标（Signals/KPI）** | 哪些指标驱动“优先级/分派/处置”？口径是什么？ | metrics + ai_context.instructions |
 | **动作（Actions）** | 哪些动作会改变对象状态/推进流程？（分派/冻结/审批/回写/创建任务…） | behavior.actions |
-| **影响（Effects）** | 动作会对哪些字段/指标产生可解释的变化？ | actions[].effects（用于归因与后续规划门禁） |
 | **门禁（Rules）** | 哪些情况必须阻止/告警/审批？（Blocked 供应商不可下单；异常需复核…） | behavior.rules（severity/when/constraint/message/remediation） |
-| **回流（Feedback）** | 执行结果写回哪里，改进下一轮？ | actions + effects（回写对象/事件/状态） |
+| **回流（Feedback）** | 执行结果写回哪里，改进下一轮？ | 通过 actions 对外部系统调用进行写回 |
 
 ### Step 1: 输入收集（最少信息集）
 
@@ -252,7 +251,7 @@ metrics:
 
 ---
 
-### Step 6: 行为层（actions / rules / effects）
+### Step 6: 行为层（actions / rules）
 
 #### 6.1 推荐放置：`semantic_model.behavior`（first-class）
 
@@ -276,12 +275,7 @@ behavior:
           properties:
             supplier_id: { type: string }
             reason: { type: string }
-      effects:
-        - entity: field
-          mode: write
-          impact_type: state_transition
-          selectors: { dataset: suppliers, field_names: [status] }
-          set_value: Blocked
+      labels: [governance, vendor_management]
   rules:
     - id: sap_p2p/rule_blocked_vendor_transaction_prevention
       title: 阻断供应商交易拦截策略
@@ -295,9 +289,10 @@ behavior:
 **Behavior schema 的硬约束（必须满足，否则 validate.py 不过）**：
 - `behavior.namespace`、`behavior.behavior_layer_version`、`behavior.actions`、`behavior.rules` 都必填（`actions`/`rules` 均允许空数组）
 - ⚠️ 旧别名 `action_types` 已从 schema 中移除，不再被识别；老模型需重命名为 `actions`
-- 每个 action 必须有 `id` 与 `title`；`kind` 仅允许 `command`/`query`；`idempotency` 仅允许 `idempotent`/`non_idempotent`/`unknown`
-- 每个 effect 必须有 `entity`（`dataset`/`field`/`metric`/`relationship`）与 `mode`（`read`/`write`/`derive`）
+- ⚠️ action 内的 `effects` / `tool_hint` / `idempotency` 已移除；如有相关语义请改放 `description` / `applies_to` / `io_schema`
+- 每个 action 必须有 `id` 与 `title`；`kind` 仅允许 `command`/`query`
 - 每个 rule 必须有 `id` / `title` / `severity`（`error`/`warn`/`info`）/ `when` / `constraint` / `message`
+- 标签字段统一使用 `labels: string[]`（旧字段 `tags` / 单数 `label` 已废弃）
 
 **Rule 的“挂载位置”最佳实践（用于图谱合理出现）**：
 - **影响 dataset/字段的规则**：建议在 `constraint.field` 填 `dataset_name.field_name`（例如 `purchase_orders.status`），或在 `applies_to.dataset` 明确写目标 dataset。
@@ -336,16 +331,7 @@ custom_extensions:
 - `tasks/resolve`（command）：记录处置结果与原因码  
 - `writeback/update_source`（command）：回写到外部系统（ERP/CRM/Case 系统）  
 
-并且至少为 “状态变更” 动作补 `effects`，让“为什么发生变化”可追溯：
-
-```yaml
-effects:
-  - entity: field
-    mode: write
-    impact_type: state_transition
-    selectors: { dataset: tasks, field_names: [status] }
-    set_value: Resolved
-```
+建议为关键的“状态变更”动作在 `description` 中明确说明影响（例如：会把 `tasks.status` 从 `Open` 置为 `Resolved`），并通过 `applies_to.selectors.field_names` 标注涉及字段，方便归因解释与人工审阅。
 
 ---
 

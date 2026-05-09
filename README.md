@@ -89,7 +89,7 @@ Skill 的工作流（详见 `SKILL.md`）：
 1. **Step 0**：用例闭环拆解（对象 / 身份 / 关系 / 信号 / 动作 / 影响 / 门禁 / 回流）
 2. **Step 0.5**：行为层放置选择（first-class `semantic_model.behavior` vs legacy `custom_extensions` 嵌入）
 3. **Step 1–5**：生成 OSI Core 骨架 → datasets → relationships → metrics
-4. **Step 6**：行为层（actions / rules / effects）
+4. **Step 6**：行为层（actions / rules）
 5. **Step 7**：门禁校验（必须跑 `validate.py`）
 6. **Step 8**：生成可视化 HTML（与 YAML 同目录）
 
@@ -105,7 +105,8 @@ Skill 的工作流（详见 `SKILL.md`）：
 - `SemanticModel` / `Dataset` / `Field` / `Relationship` / `Metric` 均 `additionalProperties: false`，扩展统一走 `custom_extensions[]` 或 `semantic_model.behavior`
 - `Expression.dialects` 至少 1 项；`DialectExpression` 仅 `dialect` + `expression`
 - `CustomExtension` 仅 `vendor_name`（枚举：`COMMON`/`SNOWFLAKE`/`SALESFORCE`/`DBT`/`DATABRICKS`）+ `data`（**JSON 字符串**）
-- `behavior`：`namespace` / `behavior_layer_version` / `actions` / `rules` 都必填（均允许空数组；旧别名 `action_types` 已移除）
+- `behavior`：`namespace` / `behavior_layer_version` / `actions` / `rules` 都必填（均允许空数组）
+- ⚠️ 已移除：顶层 `action_types` 别名、action 内的 `effects` / `tool_hint` / `idempotency`；标签字段统一为 `labels: string[]`（旧 `tags` / 单数 `label` 已废弃）
 - `Field.type`（可选）：逻辑属性类型枚举，作为 DB 映射锚点：`String` / `Number` / `Integer` / `Boolean` / `Date` / `DateTime` / `Time` / `JSON` / `Array`
 
 ---

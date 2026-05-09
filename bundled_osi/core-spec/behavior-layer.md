@@ -1,7 +1,7 @@
 # OSI 扩展规范：行为层（Actions & Rules）
 
 **适用范围：** OSI Core v0.1.2 的补充扩展规范  
-**目标：** 在不破坏 OSI Core 兼容性的前提下，引入“可执行语义（behavior layer）”，并将 **actions** 与 **rules** 两个节点结构化分离，用于确定性 action planning、归因解释（what changed/why）与工程化校验。
+**目标：** 在不破坏 OSI Core 兼容性的前提下，引入“可执行语义（behavior layer）”，并将 **actions** 与 **rules** 两个节点结构化分离，用于确定性 action planning 与工程化校验。
 
 > OSI Core 规范见：[/core-spec/spec.md](file:///Users/johnson_mac/code/OSI/core-spec/spec.md)
 
@@ -57,7 +57,7 @@ OSI Core v0.1.1 的 `vendor_name` 是枚举（`COMMON/SNOWFLAKE/SALESFORCE/DBT/D
 | `behavior_layer_version` | string | 是 | 行为层扩展版本（如 `0.1`） |
 | `actions` | array | 是 | 动作定义列表（允许空数组） |
 | `rules` | array | 是 | 规则定义列表（允许空数组） |
-| `metadata` | object | 否 | 可选元信息（owner/tags/last_updated 等） |
+| `metadata` | object | 否 | 可选元信息（owner/labels/last_updated 等） |
 
 约束：
 - `actions` 与 `rules` 必须存在（允许为空数组）
@@ -73,7 +73,7 @@ Action 用于描述：对当前 dataset（或其 field/metric/relationship）**�
 典型用途：
 - Agent/工具选择可执行能力（“能做什么”）
 - 参数化调用（输入/输出 schema）
-- RAG 检索增强（examples/tags/synonyms）
+- RAG 检索增强（examples/labels/synonyms）
 
 ### 3.2 结构（推荐）
 
@@ -85,9 +85,7 @@ Action 用于描述：对当前 dataset（或其 field/metric/relationship）**�
 | `applies_to` | object | 否 | 动作作用对象（dataset/field/metric/relationship） |
 | `io_schema` | object | 否* | 输入输出 JSON Schema（建议 draft 2020-12） |
 | `examples` | string[] | 否 | 自然语言触发示例（利于召回） |
-| `tool_hint` | object | 否 | 映射到工具/函数/方言提示 |
-| `effects` | array | 否 | **影响注解**：该动作对 dataset/field/metric/relationship 的读写/推导影响（用于规划严谨性与归因） |
-| `tags` | string[] | 否 | 能力标签 |
+| `labels` | string[] | 否 | 能力标签 |
 | `synonyms` | string[] | 否 | 动作别名（利于召回） |
 | `deprecated` | boolean | 否 | 是否弃用 |
 | `version` | string | 否 | 动作自身版本 |
@@ -104,7 +102,6 @@ Action 用于描述：对当前 dataset（或其 field/metric/relationship）**�
 | `operation` | enum | `create/read/update/delete/list/search/upsert`（以及 `batch_*`） |
 | `aggregate` | string | DDD 聚合名（例如 `Order`/`Opportunity`/`Loan`） |
 | `entity_name` | string | ORM 实体名（通常等于 dataset.name 或业务对象名） |
-| `idempotency` | enum | `idempotent` / `non_idempotent` / `unknown` |
 
 建议约束：
 - `id` 作为稳定引用键，尽量不使用中文；中文展示放在 `title`。
@@ -185,7 +182,7 @@ Rule 用于描述：对 dataset（及其字段/指标/关系）施加的 **约�
 | `message` | string | 是 | 面向用户/Agent 的提示文本 |
 | `remediation` | string | 否 | 修复建议 |
 | `references` | array | 否 | 参考链接（可选） |
-| `tags` | string[] | 否 | 标签 |
+| `labels` | string[] | 否 | 标签 |
 
 ### 4.3 constraint.type（建议枚举）
 

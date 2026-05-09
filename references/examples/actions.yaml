@@ -38,27 +38,12 @@
         pr_id: { type: "string" }
         status: { type: "string" }
         created_at: { type: "string", format: "date-time" }
-  effects:
-    - entity: "dataset"
-      mode: "write"
-      impact_type: "create_row"
-      selectors:
-        dataset: "purchase_requisitions"
-    - entity: "dataset"
-      mode: "write"
-      impact_type: "state_transition"
-      selectors:
-        dataset: "purchase_requisitions"
-      set_value: "DRAFT"
   ai_context:
     - "我要申请采购"
     - "帮我新建一个采购单"
     - "提交采购需求"
     - "add a new purchase requisition"
-  tool_hint:
-    tool_name: "dtp_create_pr"
-    dialect: "ANSI_SQL"
-  label: ["procurement", "draft", "create"]
+  labels: ["procurement", "draft", "create"]
   synonyms: ["新建采购申请", "发起采购", "录入采购单"]
   version: "1.0.0"
 ```
@@ -86,25 +71,12 @@
         pr_id: { type: "string" }
         status: { type: "string" }
         approved_at: { type: "string", format: "date-time" }
-  effects:
-    - entity: "dataset"
-      mode: "write"
-      impact_type: "state_transition"
-      selectors:
-        dataset: "purchase_requisitions"
-      set_value: "APPROVED"
-    - entity: "field"
-      mode: "write"
-      impact_type: "update_row"
-      selectors:
-        dataset: "purchase_requisitions"
-        field_names: ["status", "approved_by", "approved_at", "approval_comment"]
   ai_context:
     - "批准这个采购单"
     - "审核通过"
     - "approve this PR"
     - "同意采购申请"
-  label: ["procurement", "approval", "workflow"]
+  labels: ["procurement", "approval", "workflow"]
   synonyms: ["审核通过", "批准申请", "通过审批"]
   version: "1.0.0"
 ```
@@ -132,24 +104,12 @@
         po_id: { type: "string" }
         status: { type: "string" }
         released_at: { type: "string", format: "date-time" }
-  effects:
-    - entity: "dataset"
-      mode: "write"
-      impact_type: "create_row"
-      selectors:
-        dataset: "purchase_orders"
-    - entity: "dataset"
-      mode: "write"
-      impact_type: "state_transition"
-      selectors:
-        dataset: "purchase_requisitions"
-      set_value: "CONVERTED_TO_PO"
   ai_context:
     - "下达订单"
     - "转成采购单"
     - "release purchase order"
     - "向供应商下单"
-  label: ["procurement", "po", "release"]
+  labels: ["procurement", "po", "release"]
   synonyms: ["转PO", "生成订单", "正式下单"]
   version: "1.0.0"
 ```
@@ -186,7 +146,7 @@
     - "查看采购申请详情"
     - "这个PR的内容是什么"
     - "show me the PR details"
-  label: ["procurement", "read", "detail"]
+  labels: ["procurement", "read", "detail"]
   synonyms: ["获取PR详情", "查看申请内容"]
   version: "1.0.0"
 ```
@@ -224,7 +184,7 @@
     - "有哪些待审批的PR"
     - "search purchase requisitions"
     - "找找近期的采购申请"
-  label: ["procurement", "search", "list"]
+  labels: ["procurement", "search", "list"]
   synonyms: ["搜索采购申请", "查找PR"]
   version: "1.0.0"
 ```
@@ -253,19 +213,12 @@
           dimension: { type: "string" }
           total_count: { type: "integer" }
           total_amount: { type: "number" }
-  effects:
-    - entity: "dataset"
-      mode: "derive"
-      impact_type: "aggregate"
-      selectors:
-        dataset: "purchase_requisitions"
-        field_names: ["amount"]
   ai_context:
     - "统计本月采购金额"
     - "各部门花了多少钱"
     - "calculate total procurement amount"
     - "采购汇总报表"
-  label: ["procurement", "analytics", "aggregate"]
+  labels: ["procurement", "analytics", "aggregate"]
   synonyms: ["采购汇总", "金额统计", "聚合分析"]
   version: "1.0.0"
 ```
@@ -297,17 +250,11 @@
         success_count: { type: "integer" }
         failed_count: { type: "integer" }
         results: { type: "array" }
-  effects:
-    - entity: "dataset"
-      mode: "write"
-      impact_type: "state_transition"
-      selectors:
-        dataset: "purchase_requisitions"
   ai_context:
     - "批量审批这些PR"
     - "一次性通过多个申请"
     - "batch approve PRs"
-  label: ["procurement", "batch", "approval"]
+  labels: ["procurement", "batch", "approval"]
   synonyms: ["批量审核", "多选审批"]
   version: "1.0.0"
 ```

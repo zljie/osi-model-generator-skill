@@ -690,11 +690,6 @@ semantic_model:
                 demand_qty: { type: number }
                 required_date: { type: string }
                 priority: { type: string }
-          effects:
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: demand_requests }
           ai_context:
             - "我要提交一个物料需求"
             - "业务部门发起采购申请"
@@ -706,11 +701,6 @@ semantic_model:
           operation: derive
           entity_name: demand_plans
           description: 汇总同类需求，形成计划周期内可执行的需求计划
-          effects:
-            - entity: dataset
-              mode: derive
-              impact_type: aggregate
-              selectors: { dataset: demand_plans }
           ai_context:
             - "运行需求计划生成"
             - "汇总本月物料需求"
@@ -721,11 +711,6 @@ semantic_model:
           operation: derive
           entity_name: balancing_results
           description: 优先本厂库存、其次集团调拨、最后形成净需求；可输出替代建议
-          effects:
-            - entity: dataset
-              mode: derive
-              impact_type: compute
-              selectors: { dataset: balancing_results }
           ai_context:
             - "执行利库计算"
             - "检查库存可用性"
@@ -737,15 +722,6 @@ semantic_model:
           operation: create
           entity_name: purchase_requisitions
           description: 从需求计划/利库结果参考创建PR，或由需求方独立创建PR（紧急/零星）
-          effects:
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: purchase_requisitions }
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: purchase_requisition_items }
           ai_context:
             - "创建采购申请单"
             - "发起PR"
@@ -756,12 +732,6 @@ semantic_model:
           kind: command
           operation: approve
           entity_name: purchase_requisitions
-          effects:
-            - entity: field
-              mode: write
-              impact_type: state_transition
-              selectors: { dataset: purchase_requisitions, field_names: [status, approved_at] }
-              set_value: Approved
           ai_context:
             - "审批采购申请"
             - "通过PR"
@@ -773,15 +743,6 @@ semantic_model:
           operation: create
           entity_name: purchase_orders
           description: 聚合同类PR形成集采PO，或单PR转PO；可从框架协议带出价格条款
-          effects:
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: purchase_orders }
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: purchase_order_items }
           ai_context:
             - "创建采购订单"
             - "下达PO"
@@ -792,12 +753,6 @@ semantic_model:
           kind: command
           operation: release
           entity_name: purchase_orders
-          effects:
-            - entity: field
-              mode: write
-              impact_type: state_transition
-              selectors: { dataset: purchase_orders, field_names: [status, released_at] }
-              set_value: Released
           ai_context:
             - "释放/下达采购订单"
             - "发送订单给供应商"
@@ -808,19 +763,6 @@ semantic_model:
           operation: post
           entity_name: goods_receipts
           description: 根据有效PO执行到货登记、质检、生成收货凭证并联动库存与应付暂估
-          effects:
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: goods_receipts }
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: goods_receipt_items }
-            - entity: dataset
-              mode: write
-              impact_type: create_row
-              selectors: { dataset: inventory_transactions }
           ai_context:
             - "执行收货过账"
             - "物料到货入库"
@@ -834,7 +776,7 @@ semantic_model:
           constraint: { type: compliance, requires: ["purchase_requisitions.status='Approved'"] }
           ai_context: "采购订单必须来源于已审批通过的采购申请，严禁无申请下单。"
           remediation: "先创建并审批PR（pr/create + pr/approve），再执行 po/create。"
-          label: [合规, 采购流程]
+          labels: [合规, 采购流程]
 
         - id: dtp/rule_gr_requires_released_po
           name: 无有效PO不收货（仅允许对已下达/确认PO收货）
@@ -843,7 +785,7 @@ semantic_model:
           constraint: { type: compliance, requires: ["purchase_orders.status IN ('Released','Confirmed')"] }
           ai_context: "收货必须以有效的采购订单为凭证，不允许无单到货。"
           remediation: "先下达PO（po/create + po/release）并确保状态有效，再收货过账。"
-          label: [合规, 收货流程]
+          labels: [合规, 收货流程]
 
         - id: dtp/rule_budget_check_required
           name: 预算校验必过（PR必须通过预算控制）
@@ -852,7 +794,7 @@ semantic_model:
           constraint: { type: governance, equals: "Pass" }
           ai_context: "采购申请必须校验预算可用额度，未通过预算校验不得进入审批与下单。"
           remediation: "补充预算/调整科目或拆分申请后重新提交。"
-          label: [治理, 预算控制]
+          labels: [治理, 预算控制]
 
         - id: dtp/rule_supplier_must_be_qualified
           name: 供应商准入门禁（未准入或阻断供应商不可交易）
@@ -861,7 +803,7 @@ semantic_model:
           constraint: { type: risk, requires: ["suppliers.qualification_status='Approved'", "suppliers.status<>'Blocked'"] }
           ai_context: "供应商未准入或处于阻断状态时，不得被推荐或用于下单。"
           remediation: "先走供应商准入/解冻流程，或选择其他合规供应商。"
-          label: [风险控制, 供应商管理]
+          labels: [风险控制, 供应商管理]
 
         - id: dtp/rule_balancing_before_purchase
           name: 利库优先（能利库不新购）
@@ -870,7 +812,7 @@ semantic_model:
           constraint: { type: policy, recommendation: "优先引用 balancing_results.recommended_action='transfer' 的调拨建议" }
           ai_context: "业务原则要求优先平衡利库：优先本厂库存，其次集团调拨，最后生成净需求再采购。"
           remediation: "先执行 balancing/run，并在PR中标记参考创建来源（derived_from_balancing_id）。"
-          label: [策略, 库存优化]
+          labels: [策略, 库存优化]
 
         - id: dtp/rule_gr_qty_tolerance
           name: 收货超允差需审批
@@ -879,4 +821,4 @@ semantic_model:
           constraint: { type: control, refers_to: "purchase_order_items.delivery_tolerance_pct" }
           ai_context: "收货数量超PO允差/超额应触发例外审批与复核。"
           remediation: "走BPM例外审批后再过账，或拆分/更正PO行项允差。"
-          label: [控制, 收货管理]
+          labels: [控制, 收货管理]

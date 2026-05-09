@@ -29,7 +29,7 @@
   references:
     - { title: "采购管理制度", url: "/docs/procurement-policy" }
     - { title: "端到端流程说明", url: "/docs/pr-to-po-flow" }
-  label: ["procurement", "compliance", "pr-po-linkage"]
+  labels: ["procurement", "compliance", "pr-po-linkage"]
 ```
 
 ### 1.2 紧急采购必须附说明
@@ -57,7 +57,7 @@
     - "Emergency procurement requires a detailed note"
   references:
     - { title: "紧急采购流程", url: "/docs/emergency-procurement" }
-  label: ["procurement", "emergency", "compliance"]
+  labels: ["procurement", "emergency", "compliance"]
 ```
 
 ---
@@ -90,7 +90,7 @@
     - "High-value order requires second-level approval"
   references:
     - { title: "预算审批权限表", url: "/docs/approval-matrix" }
-  label: ["procurement", "governance", "high-value", "segregation-of-duties"]
+  labels: ["procurement", "governance", "high-value", "segregation-of-duties"]
 ```
 
 ### 2.2 供应商必须已准入
@@ -115,7 +115,7 @@
     - "Vendor is not approved or has been disabled"
   references:
     - { title: "供应商管理流程", url: "/docs/vendor-management" }
-  label: ["procurement", "vendor", "governance"]
+  labels: ["procurement", "vendor", "governance"]
 ```
 
 ---
@@ -144,7 +144,7 @@
     - "Price exceeds market reference by more than 20%"
   references:
     - { title: "价格审计政策", url: "/docs/price-audit" }
-  label: ["procurement", "price", "risk", "market-comparison"]
+  labels: ["procurement", "price", "risk", "market-comparison"]
 ```
 
 ### 3.2 单一供应商依赖预警
@@ -165,7 +165,7 @@
     - "近半年该物料类别80%以上采购来自同一供应商，存在供应链风险"
     - "单一供应商依赖度过高"
     - "High dependency on single vendor detected"
-  label: ["procurement", "supply-chain", "risk", "diversification"]
+  labels: ["procurement", "supply-chain", "risk", "diversification"]
 ```
 
 ---
@@ -192,7 +192,7 @@
     - "Stock availability detected, consider using existing inventory first"
   references:
     - { title: "库存管理政策", url: "/docs/inventory-policy" }
-  label: ["procurement", "policy", "stock-first"]
+  labels: ["procurement", "policy", "stock-first"]
 ```
 
 ---
@@ -220,7 +220,7 @@
     - "Quantity exceeds tolerance limit"
   references:
     - { title: "收货允差标准", url: "/docs/receiving-tolerance" }
-  label: ["procurement", "control", "receiving", "tolerance"]
+  labels: ["procurement", "control", "receiving", "tolerance"]
 ```
 
 ### 5.2 金额超额控制
@@ -244,7 +244,7 @@
     - "到票金额超过订单金额105%的上限，不允许过账"
     - "发票金额超出允许范围"
     - "Invoice amount exceeds PO limit by more than 5%"
-  label: ["procurement", "control", "invoice", "amount-limit"]
+  labels: ["procurement", "control", "invoice", "amount-limit"]
 ```
 
 ---
@@ -271,7 +271,7 @@
     - "申请人ID格式不正确，应为2位大写字母+6位数字"
     - "员工编号格式错误"
     - "Employee ID format is incorrect"
-  label: ["procurement", "naming", "format", "employee-id"]
+  labels: ["procurement", "naming", "format", "employee-id"]
 ```
 
 ---
@@ -300,7 +300,7 @@
     - "采购申请明细行缺少必填字段，无法提交"
     - "物料编码、数量或期望价格不能为空"
     - "Required fields are missing in line item"
-  label: ["procurement", "quality", "required-fields"]
+  labels: ["procurement", "quality", "required-fields"]
 ```
 
 ---
@@ -327,7 +327,7 @@
     - "该字段为敏感信息，您的角色无权限访问"
     - "银行账户信息仅财务人员可见"
     - "This field is restricted to Finance role only"
-  label: ["security", "pii", "finance-data"]
+  labels: ["security", "pii", "finance-data"]
 ```
 
 ---
@@ -352,7 +352,7 @@
     - "报表默认过滤条件：仅统计已审批通过的采购申请和订单"
     - "默认仅显示已审批数据"
     - "Reports filter to show only approved records by default"
-  label: ["procurement", "filter", "report", "default-condition"]
+  labels: ["procurement", "filter", "report", "default-condition"]
 ```
 
 ---
@@ -383,5 +383,5 @@
     - "明细行字段不允许使用聚合函数，请使用明细数值"
     - "不允许在明细行使用聚合"
     - "Aggregate functions are not allowed in line items"
-  label: ["procurement", "expression", "validation"]
+  labels: ["procurement", "expression", "validation"]
 ```

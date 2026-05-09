@@ -16,7 +16,7 @@
 4. [Relationships](#relationships)
 5. [Fields](#fields)
 6. [Metrics](#metrics)
-7. [Behavior (Actions / Rules / Effects)](#behavior-actions--rules--effects)
+7. [Behavior (Actions / Rules)](#behavior-actions--rules)
 8. [Custom Extensions](#custom-extensions)
 9. [Complete Example](#complete-example)
 
@@ -64,7 +64,7 @@ The top-level container that represents a complete semantic model, including dat
 | `datasets`          | array         | Yes      | Collection of logical datasets (fact and dimension tables)                           |
 | `relationships`     | array         | No       | Defines how logical datasets are connected                                           |
 | `metrics`           | array         | No       | Quantifiable measures defined as aggregate expessions on fields from logical datsets |
-| `behavior`          | object        | No       | Optional behavior layer: actions/rules/effects for deterministic action planning and attribution |
+| `behavior`          | object        | No       | Optional behavior layer: actions and rules for deterministic action planning and governance |
 | `custom_extensions` | array         | No       | Vendor-specific attributes for extensibility                                         |
 
 ### Example
@@ -209,7 +209,7 @@ Fields represent row-level attributes that can be used for grouping, filtering, 
 | `type`              | enum          | No       | Logical property type, anchor for DB/engine type mapping. Allowed: `String`, `Number`, `Integer`, `Boolean`, `Date`, `DateTime`, `Time`, `JSON`, `Array` |
 | `expression`        | object        | Yes      | Expression definition with dialect support         |
 | `dimension`         | object        | No       | Dimension metadata (e.g., `is_time` flag)          |
-| `label`             | string        | No       | Label for categorization                           |
+| `labels`            | string[]      | No       | Tags/labels for categorization                     |
 | `description`       | string        | No       | Human-readable description                         |
 | `ai_context`        | string/object | No       | Additional context for AI tools (e.g., synonyms)   |
 | `custom_extensions` | array         | No       | Vendor-specific attributes                         |
@@ -374,9 +374,9 @@ expression:
 
 ***
 
-## Behavior (Actions / Rules / Effects)
+## Behavior (Actions / Rules)
 
-Behavior is an optional, vendor-agnostic layer for **deterministic action planning** and **attribution** (what changed/why).
+Behavior is an optional, vendor-agnostic layer for **deterministic action planning** and **governance**.
 
 This specification supports two equivalent placements:
 1) **Preferred (first-class):** `semantic_model[].behavior`
@@ -390,7 +390,7 @@ This specification supports two equivalent placements:
 | `behavior_layer_version` | string | Yes    | Version for behavior schema evolution |
 | `actions`              | array  | Yes      | List of supported actions (allowed empty array) |
 | `rules`                | array  | Yes      | Declarative constraints/guards for planning and governance |
-| `metadata`             | object | No       | Governance metadata (owner/tags/last_updated, etc.) |
+| `metadata`             | object | No       | Governance metadata (owner/labels/last_updated, etc.) |
 
 ### Action Schema (high-level)
 
@@ -402,16 +402,7 @@ Actions represent executable intents (API calls, workflows, tools). This spec in
 | `title`   | string | Yes      | Human-friendly title |
 | `kind`    | string | No       | `command` or `query` |
 | `operation` | string | No     | Free-form operation name (e.g. `block`, `unblock`, `analyze`) |
-| `effects` | array  | No       | Optional machine-readable impact annotations (see below) |
-
-### Effects (impact annotations)
-
-Effects encode how an action changes datasets/fields for:
-- plan validation (state transitions / prohibited follow-ups)
-- attribution (what changed/why for a field or dataset)
-
-Minimal effect fields:
-`entity` (dataset/field/metric/relationship), `mode` (read/write/derive), `selectors` (dataset + field_names), optional `impact_type`, `transition`, `set_value`.
+| `labels`  | string[] | No     | Tags/labels for categorization |
 
 ### Example
 
@@ -428,14 +419,6 @@ semantic_model:
           kind: command
           operation: block
           entity_name: suppliers
-          effects:
-            - entity: field
-              mode: write
-              impact_type: state_transition
-              selectors:
-                dataset: suppliers
-                field_names: [status]
-              set_value: Blocked
       rules: []
 ```
 
@@ -447,7 +430,7 @@ Custom extensions allow vendors to add platform-specific metadata without breaki
 
 ### Recommended Extensions
 
-- **Behavior Layer (Action Types & Rules)**: You MAY embed behavior-layer JSON in `custom_extensions` for legacy compatibility. New models SHOULD prefer `semantic_model.behavior`. See `core-spec/behavior-layer.md` and `core-spec/behavior-layer.schema.json`.
+- **Behavior Layer (Actions & Rules)**: You MAY embed behavior-layer JSON in `custom_extensions` for legacy compatibility. New models SHOULD prefer `semantic_model.behavior`. See `core-spec/behavior-layer.md` and `core-spec/behavior-layer.schema.json`.
 
 ### Schema
 
@@ -491,7 +474,7 @@ custom_extensions:
   data: '{
     "project_name": "analytics",
     "materialized": "table",
-    "tags": ["daily", "core"]
+    "labels": ["daily", "core"]
   }'
 ```
 
