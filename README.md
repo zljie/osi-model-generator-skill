@@ -106,6 +106,7 @@ Skill 的工作流（详见 `SKILL.md`）：
 - `behavior`：`namespace` / `behavior_layer_version` / `actions` / `rules` 都必填（均允许空数组）
 - `BehaviorAction` 必填 `id` + `name`；`kind` 枚举：`command` / `query`
 - `BehaviorRule` 必填 `id` + `name` + `severity`（`error`/`warn`/`info`） + `when` + `constraint` + `message`
+- ****生成期硬约束（SKILL §6.3）****：每个 dataset 至少要有 `<D>/get_by_id` + `<D>/list` 两个 query action；业务查询统一落为 `analytics/...` action（不只是 `ai_context.examples`）
 - `Field.type`（可选）：逻辑属性类型枚举，作为 DB 映射锚点：`String` / `Number` / `Integer` / `Boolean` / `Date` / `DateTime` / `Time` / `JSON` / `Array`
 - ⚠️ **已移除/废弃**：
   - 顶层 `action_types` 别名（统一用 `actions`）
@@ -122,7 +123,7 @@ Skill 的工作流（详见 `SKILL.md`）：
 | [`sap_procurement_ontology.yaml`](./references/examples/sap_procurement_ontology.yaml) + [`_viewer.html`](./references/examples/sap_procurement_ontology_viewer.html) | SAP P2P (PR→PO) 完整本体：5 datasets / 5 relationships / 6 metrics / 4 actions / 4 rules | ✅ PASS |
 | [`restaurant_ops_min.yaml`](./references/examples/restaurant_ops_min.yaml) | 餐饮经营分析最小骨架 | ✅ PASS |
 | [`sap_p2p_min.yaml`](./references/examples/sap_p2p_min.yaml) | SAP P2P 缺料预警精简版 + 行为层 | ✅ PASS |
-| [`dtp_semantic_model.yaml`](./references/examples/dtp_semantic_model.yaml) | 完整 DTP（Demand-to-Procurement）语义模型 | ⚠ 部分 rule 缺 `message`（待修） |
+| [`dtp_semantic_model.yaml`](./references/examples/dtp_semantic_model.yaml) | 完整 DTP（Demand-to-Procurement）语义模型，14 datasets / 43 actions （入 SKILL 6.3 生成规则）/ 6 rules | ✅ PASS |
 | [`library_semantic_model.yaml`](./references/examples/library_semantic_model.yaml) | 图书馆借阅（loans/books/members/branches）+ 行为层 | ✅ PASS |
 | [`crm_semantic_model.yaml`](./references/examples/crm_semantic_model.yaml) | Salesforce CRM 销售管道（opportunities/accounts/tasks/cases）+ 行为层 | ✅ PASS |
 | [`food_semantic_model_semantic_v2.yaml`](./references/examples/food_semantic_model_semantic_v2.yaml) | 餐饮经营分析（订单/菜品/库存/会员/活动）+ 行为层 | ✅ PASS |
