@@ -1,0 +1,657 @@
+# yaml-language-server: $schema=../core-spec/osi-schema.json
+
+version: "0.1.1"
+
+semantic_model:
+  - name: library_borrowing_model
+    description: 图书馆借阅系统语义模型（借阅、归还、逾期、馆藏与读者分析）
+    ai_context:
+      instructions: "用于图书馆运营分析与问答。围绕借阅流水（loans）做聚合，按图书、读者、分馆与日期维度切分。"
+      synonyms:
+        - "借阅系统"
+        - "图书馆运营"
+        - "借书还书"
+      examples:
+        - "本月总借阅量是多少？"
+        - "当前未归还的借阅有多少？"
+        - "按分馆统计逾期借阅数"
+        - "最受欢迎的图书分类有哪些？"
+
+    datasets:
+      - name: loans
+        source: library.public.loans
+        primary_key: [loan_id]
+        unique_keys:
+          - [loan_id]
+        description: 借阅流水事实表（每一笔借出/归还记录）
+        ai_context:
+          synonyms:
+            - "借阅记录"
+            - "借书流水"
+            - "借出明细"
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "PALANTIR",
+                "behavior_layer_version": "0.1",
+                "action_types": [
+                  {
+                    "id": "loans/create",
+                    "title": "创建借阅记录",
+                    "kind": "command",
+                    "operation": "create",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "non_idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["book_id", "member_id", "branch_id", "loan_date", "due_date"],
+                        "properties": {
+                          "book_id": { "type": "string" },
+                          "member_id": { "type": "string" },
+                          "branch_id": { "type": "string" },
+                          "loan_date": { "type": "string" },
+                          "due_date": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["为张三创建一笔借阅记录", "借出一本书并设定应还日期"],
+                    "tags": ["crud", "借阅", "写入"]
+                  },
+                  {
+                    "id": "loans/read",
+                    "title": "按借阅ID查询借阅",
+                    "kind": "query",
+                    "operation": "read",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["loan_id"],
+                        "properties": {
+                          "loan_id": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["查询 loan_id=123 的借阅记录"],
+                    "tags": ["crud", "读取"]
+                  },
+                  {
+                    "id": "loans/list",
+                    "title": "分页列出借阅记录",
+                    "kind": "query",
+                    "operation": "list",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "page": { "type": "number" },
+                          "page_size": { "type": "number" },
+                          "branch_id": { "type": "string" },
+                          "member_id": { "type": "string" },
+                          "status": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["列出某分馆最近的借阅记录", "按读者分页查看借阅历史"],
+                    "tags": ["crud", "列表"]
+                  },
+                  {
+                    "id": "loans/update",
+                    "title": "更新借阅记录（非归还场景）",
+                    "kind": "command",
+                    "operation": "update",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "unknown",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["loan_id"],
+                        "properties": {
+                          "loan_id": { "type": "string" },
+                          "due_date": { "type": "string" },
+                          "branch_id": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["调整应还日期", "变更借阅所属分馆"],
+                    "tags": ["crud", "更新"]
+                  },
+                  {
+                    "id": "loans/delete",
+                    "title": "删除借阅记录（谨慎）",
+                    "kind": "command",
+                    "operation": "delete",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "unknown",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["loan_id"],
+                        "properties": {
+                          "loan_id": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["删除错误录入的借阅记录"],
+                    "tags": ["crud", "删除", "治理"]
+                  },
+                  {
+                    "id": "loans/renew",
+                    "title": "续借",
+                    "kind": "command",
+                    "operation": "update",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["loan_id", "new_due_date"],
+                        "properties": {
+                          "loan_id": { "type": "string" },
+                          "new_due_date": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["把借阅延长到下周", "续借并更新应还日期"],
+                    "tags": ["ddd", "续借", "业务动作"]
+                  },
+                  {
+                    "id": "loans/return",
+                    "title": "归还",
+                    "kind": "command",
+                    "operation": "update",
+                    "aggregate": "Loan",
+                    "entity_name": "loans",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["loan_id", "return_date"],
+                        "properties": {
+                          "loan_id": { "type": "string" },
+                          "return_date": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["办理还书", "设置归还日期并更新状态"],
+                    "tags": ["ddd", "归还", "业务动作"]
+                  },
+                  {
+                    "id": "loans/list_overdue",
+                    "title": "查询逾期借阅清单",
+                    "description": "按日期/分馆筛选逾期且未归还的借阅记录，用于运营跟进与催还。",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "as_of_date": { "type": "string", "description": "统计截止日期（YYYY-MM-DD）" },
+                          "branch_id": { "type": "string", "description": "分馆ID（可选）" }
+                        }
+                      }
+                    },
+                    "examples": ["列出今天逾期未还的借阅", "按分馆统计逾期借阅清单"],
+                    "tags": ["逾期", "催还", "运营"]
+                  }
+                ],
+                "rules": [
+                  {
+                    "id": "loans/rule_overdue_definition",
+                    "title": "逾期口径定义",
+                    "severity": "info",
+                    "when": { "entity": "dataset" },
+                    "constraint": { "type": "filter" },
+                    "message": "逾期=return_date 为空且 due_date < CURRENT_DATE（与字段 is_overdue 口径保持一致）。",
+                    "remediation": "如系统需要按时区/营业日定义逾期，请在字段/指标表达式中显式实现，并更新此规则说明。",
+                    "tags": ["口径", "逾期"]
+                  }
+                ]
+              }
+        fields:
+          - name: loan_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loan_id
+            description: 借阅记录唯一标识
+
+          - name: book_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: book_id
+            description: 外键：图书
+            ai_context:
+              synonyms:
+                - "图书ID"
+                - "馆藏ID"
+
+          - name: member_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: member_id
+            description: 外键：读者
+            ai_context:
+              synonyms:
+                - "读者ID"
+                - "借阅人ID"
+
+          - name: branch_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: branch_id
+            description: 外键：分馆
+            ai_context:
+              synonyms:
+                - "分馆ID"
+                - "网点ID"
+
+          - name: loan_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loan_date
+            description: 借出日期
+            dimension:
+              is_time: true
+
+          - name: due_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: due_date
+            description: 应还日期
+            dimension:
+              is_time: true
+
+          - name: return_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: return_date
+            description: 实际归还日期（未归还为空）
+            dimension:
+              is_time: true
+
+          - name: loan_status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: CASE WHEN return_date IS NULL THEN 'OUT' ELSE 'RETURNED' END
+            description: 借阅状态（OUT/RETURNED）
+            ai_context:
+              synonyms:
+                - "是否归还"
+                - "借阅状态"
+
+          - name: is_overdue
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: CASE WHEN return_date IS NULL AND due_date < CURRENT_DATE THEN 1 ELSE 0 END
+            description: 是否逾期（1=逾期且未归还）
+            ai_context:
+              synonyms:
+                - "逾期标记"
+                - "超期"
+
+      - name: books
+        source: library.public.books
+        primary_key: [book_id]
+        unique_keys:
+          - [book_id]
+          - [isbn]
+        description: 图书维度（馆藏与书目信息）
+        ai_context:
+          synonyms:
+            - "书目"
+            - "馆藏"
+            - "图书信息"
+        fields:
+          - name: book_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: book_id
+            description: 图书唯一标识
+
+          - name: isbn
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: isbn
+            description: 国际标准书号
+
+          - name: title
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: title
+            description: 书名
+            ai_context:
+              synonyms:
+                - "图书名称"
+                - "书名"
+
+          - name: author
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: author
+            description: 作者
+
+          - name: category
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: category
+            description: 分类
+            ai_context:
+              synonyms:
+                - "图书分类"
+                - "类目"
+
+          - name: published_year
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: published_year
+            description: 出版年份
+            dimension:
+              is_time: true
+
+          - name: language
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: language
+            description: 语种
+
+      - name: members
+        source: library.public.members
+        primary_key: [member_id]
+        unique_keys:
+          - [member_id]
+          - [member_number]
+        description: 读者维度（账户与会员信息）
+        ai_context:
+          synonyms:
+            - "读者"
+            - "会员"
+            - "借阅人"
+        fields:
+          - name: member_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: member_id
+            description: 读者唯一标识
+
+          - name: member_number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: member_number
+            description: 读者编号（业务主键）
+
+          - name: first_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: first_name
+            description: 名
+
+          - name: last_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: last_name
+            description: 姓
+
+          - name: full_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: first_name || ' ' || last_name
+            description: 读者姓名（计算字段）
+            ai_context:
+              synonyms:
+                - "读者姓名"
+                - "会员姓名"
+
+          - name: email
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: email
+            description: 邮箱
+
+          - name: membership_type
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_type
+            description: 会员类型（如：student/adult/staff）
+            ai_context:
+              synonyms:
+                - "读者类型"
+                - "会员类别"
+
+          - name: join_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: join_date
+            description: 注册/入馆日期
+            dimension:
+              is_time: true
+
+      - name: branches
+        source: library.public.branches
+        primary_key: [branch_id]
+        unique_keys:
+          - [branch_id]
+          - [branch_code]
+        description: 分馆维度（网点与地理信息）
+        ai_context:
+          synonyms:
+            - "分馆"
+            - "网点"
+            - "馆点"
+        fields:
+          - name: branch_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: branch_id
+            description: 分馆唯一标识
+
+          - name: branch_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: branch_code
+            description: 分馆编号（业务主键）
+
+          - name: branch_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: branch_name
+            description: 分馆名称
+
+          - name: city
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: city
+            description: 城市
+
+          - name: state
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: state
+            description: 省/州
+
+      - name: date_dim
+        source: library.public.date_dim
+        primary_key: [date]
+        unique_keys:
+          - [date]
+        description: 日期维度（用于时间切片与汇总）
+        ai_context:
+          synonyms:
+            - "日期"
+            - "日历"
+            - "时间维度"
+        fields:
+          - name: date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date
+            description: 日期
+            dimension:
+              is_time: true
+
+          - name: year
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: year
+            description: 年
+            dimension:
+              is_time: true
+
+          - name: quarter_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: quarter_name
+            description: 季度（如：2026Q1）
+            dimension:
+              is_time: true
+
+          - name: month_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: month_name
+            description: 月份（如：2026-01）
+            dimension:
+              is_time: true
+
+    relationships:
+      - name: loans_to_books
+        from: loans
+        to: books
+        from_columns: [book_id]
+        to_columns: [book_id]
+        ai_context:
+          synonyms:
+            - "借阅的图书"
+            - "借了什么书"
+
+      - name: loans_to_members
+        from: loans
+        to: members
+        from_columns: [member_id]
+        to_columns: [member_id]
+        ai_context:
+          synonyms:
+            - "借阅的读者"
+            - "是谁借的"
+
+      - name: loans_to_branches
+        from: loans
+        to: branches
+        from_columns: [branch_id]
+        to_columns: [branch_id]
+        ai_context:
+          synonyms:
+            - "借阅发生在哪个分馆"
+            - "借阅网点"
+
+      - name: loans_to_loan_date
+        from: loans
+        to: date_dim
+        from_columns: [loan_date]
+        to_columns: [date]
+        ai_context:
+          synonyms:
+            - "借出日期关系"
+            - "何时借出"
+
+    metrics:
+      - name: total_loans
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(loans.loan_id)
+        description: 借阅总次数（借阅记录数）
+        ai_context:
+          synonyms:
+            - "借阅量"
+            - "借阅次数"
+
+      - name: active_loans
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN loans.return_date IS NULL THEN 1 ELSE 0 END)
+        description: 当前未归还借阅数
+        ai_context:
+          synonyms:
+            - "在借数量"
+            - "未归还数量"
+
+      - name: overdue_active_loans
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN loans.return_date IS NULL AND loans.due_date < CURRENT_DATE THEN 1 ELSE 0 END)
+        description: 当前逾期且未归还借阅数
+        ai_context:
+          synonyms:
+            - "逾期数量"
+            - "超期未还"
+
+      - name: avg_return_duration_days
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: AVG(CASE WHEN loans.return_date IS NOT NULL THEN (loans.return_date - loans.loan_date) END)
+        description: 平均归还周期（仅统计已归还记录；单位取决于底层日期类型/引擎语义）
+        ai_context:
+          synonyms:
+            - "平均借阅时长"
+            - "平均归还用时"

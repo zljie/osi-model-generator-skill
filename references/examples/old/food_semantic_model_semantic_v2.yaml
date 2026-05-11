@@ -1,0 +1,2234 @@
+# yaml-language-server: $schema=../core-spec/osi-schema.json
+
+version: "0.1.1"
+
+semantic_model:
+  - name: restaurant_management_model_semantic_v2
+    description: 餐饮管理系统语义模型（点餐服务/菜品管理/原材料与库存/成本核算/会员运营/活动营销/经营分析）
+    ai_context:
+      instructions: "用于餐饮经营分析与问答。围绕订单明细（order_items）做聚合，按门店、菜品、品类、时间、渠道、活动等维度切分。若用户只说“销量/营收”，默认指已支付订单；如需退款/取消需明确说明。涉及成本/库存/券/套餐口径，优先引用本模型的字段与规则说明，再给出结论。"
+      synonyms:
+        - "餐饮系统"
+        - "点餐系统"
+        - "门店经营"
+        - "菜品运营"
+      examples:
+        - "本月各门店营业额是多少？"
+        - "按菜品统计销量 Top 10"
+        - "活动 A 带来的增量销量是多少？"
+        - "按小时看高峰下单量"
+        - "退款金额占比是多少？"
+
+    datasets:
+      - name: orders
+        source: restaurant.public.orders
+        primary_key: [order_id]
+        unique_keys:
+          - [order_id]
+          - [order_number]
+        description: 订单主表（点餐服务：每笔订单一行）
+        ai_context:
+          synonyms:
+            - "订单"
+            - "下单记录"
+        fields:
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.order_id
+            description: 订单ID
+          - name: order_number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.order_number
+            description: 订单号（业务主键）
+          - name: store_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.store_id
+            description: 外键：门店
+            ai_context:
+              synonyms: ["门店ID"]
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.customer_id
+            description: 外键：顾客
+            ai_context:
+              synonyms: ["顾客ID", "会员ID"]
+          - name: channel
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.channel
+            description: 下单渠道（如 dine_in/takeaway/delivery/app）
+            ai_context:
+              synonyms: ["渠道", "堂食外卖"]
+          - name: order_status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.order_status
+            description: 订单状态（CREATED/PAID/CANCELLED/REFUNDED等）
+            ai_context:
+              synonyms: ["状态", "是否支付"]
+          - name: order_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.order_time
+            description: 下单时间
+            dimension:
+              is_time: true
+          - name: paid_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.paid_time
+            description: 支付时间（未支付为空）
+            dimension:
+              is_time: true
+          - name: total_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: orders.total_amount
+            description: 订单总金额（含折扣后/税费口径需在说明中统一）
+            ai_context:
+              synonyms: ["订单金额", "实付金额"]
+
+      - name: order_items
+        source: restaurant.public.order_items
+        primary_key: [order_item_id]
+        unique_keys:
+          - [order_item_id]
+        description: 订单明细（点餐服务：每个菜品一行，作为事实粒度推荐入口）
+        ai_context:
+          synonyms:
+            - "点单明细"
+            - "订单行"
+            - "菜品销量明细"
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "RESTAURANT",
+                "behavior_layer_version": "0.2",
+                "action_types": [
+                  {
+                    "id": "orders/create",
+                    "title": "创建订单（下单）",
+                    "kind": "command",
+                    "operation": "create",
+                    "aggregate": "Order",
+                    "entity_name": "orders",
+                    "idempotency": "non_idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["store_id", "channel", "order_time"],
+                        "properties": {
+                          "store_id": { "type": "string" },
+                          "customer_id": { "type": "string" },
+                          "channel": { "type": "string" },
+                          "order_time": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["创建一笔堂食订单", "用户下单生成订单"],
+                    "tags": ["ddd", "订单", "下单"]
+                  },
+                  {
+                    "id": "order_items/create",
+                    "title": "新增订单明细（加菜）",
+                    "kind": "command",
+                    "operation": "create",
+                    "aggregate": "Order",
+                    "entity_name": "order_items",
+                    "idempotency": "non_idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["order_id", "dish_id", "quantity"],
+                        "properties": {
+                          "order_id": { "type": "string" },
+                          "dish_id": { "type": "string" },
+                          "quantity": { "type": "number" },
+                          "item_price": { "type": "number" }
+                        }
+                      }
+                    },
+                    "examples": ["给订单加一份宫保鸡丁", "新增一条点单明细"],
+                    "tags": ["crud", "点单", "写入"]
+                  },
+                  {
+                    "id": "order_items/update",
+                    "title": "修改订单明细（改数量/改价）",
+                    "kind": "command",
+                    "operation": "update",
+                    "aggregate": "Order",
+                    "entity_name": "order_items",
+                    "idempotency": "unknown",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["order_item_id"],
+                        "properties": {
+                          "order_item_id": { "type": "string" },
+                          "quantity": { "type": "number" },
+                          "item_price": { "type": "number" }
+                        }
+                      }
+                    },
+                    "examples": ["把某条点单数量改为 2", "修改明细单价"],
+                    "tags": ["crud", "更新"]
+                  },
+                  {
+                    "id": "order_items/delete",
+                    "title": "删除订单明细（退菜）",
+                    "kind": "command",
+                    "operation": "delete",
+                    "aggregate": "Order",
+                    "entity_name": "order_items",
+                    "idempotency": "unknown",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["order_item_id"],
+                        "properties": {
+                          "order_item_id": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["退掉某条菜品明细", "删除点单明细"],
+                    "tags": ["crud", "退菜", "删除"]
+                  },
+                  {
+                    "id": "orders/pay",
+                    "title": "支付订单",
+                    "kind": "command",
+                    "operation": "update",
+                    "aggregate": "Order",
+                    "entity_name": "orders",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["order_id", "paid_time"],
+                        "properties": {
+                          "order_id": { "type": "string" },
+                          "paid_time": { "type": "string" },
+                          "payment_method": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["将订单标记为已支付", "支付完成更新支付时间"],
+                    "tags": ["ddd", "支付", "业务动作"]
+                  },
+                  {
+                    "id": "orders/refund",
+                    "title": "退款订单",
+                    "kind": "command",
+                    "operation": "update",
+                    "aggregate": "Order",
+                    "entity_name": "orders",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["order_id"],
+                        "properties": {
+                          "order_id": { "type": "string" },
+                          "refund_amount": { "type": "number" },
+                          "reason": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["对订单发起退款", "取消订单并退款"],
+                    "tags": ["ddd", "退款", "业务动作"]
+                  },
+                  {
+                    "id": "order_items/top_dishes",
+                    "title": "生成菜品销量 TopN",
+                    "description": "按时间/门店/品类筛选后输出销量 TopN 菜品，用于运营复盘。",
+                    "applies_to": { "entity": "metric", "selectors": { "metric_names": ["dish_units_sold"] } },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "start_date": { "type": "string", "description": "开始日期（YYYY-MM-DD）" },
+                          "end_date": { "type": "string", "description": "结束日期（YYYY-MM-DD）" },
+                          "store_id": { "type": "string", "description": "门店ID（可选）" },
+                          "category_id": { "type": "string", "description": "品类ID（可选）" },
+                          "top_n": { "type": "number", "description": "Top N（默认 10）" }
+                        }
+                      }
+                    },
+                    "examples": ["按菜品统计销量 Top 10", "本周各门店销量Top5菜品"],
+                    "tags": ["销量", "排行", "菜品运营"]
+                  }
+                ],
+                "rules": [
+                  {
+                    "id": "food/rule_paid_only_default",
+                    "title": "营收/销量默认口径：仅已支付",
+                    "severity": "warn",
+                    "when": { "entity": "metric", "selectors": { "metric_names": ["gross_revenue", "dish_units_sold"] } },
+                    "constraint": { "type": "filter" },
+                    "message": "营收与销量默认仅统计已支付订单（orders.order_status='PAID'）。",
+                    "remediation": "如需包含退款/取消，请新增独立指标或在问题中明确说明口径。",
+                    "tags": ["口径", "支付状态"]
+                  },
+                  {
+                    "id": "food/rule_costing_assumptions",
+                    "title": "成本/毛利口径声明（配方×单位成本）",
+                    "severity": "warn",
+                    "when": { "entity": "metric", "selectors": { "metric_names": ["dish_theoretical_unit_cost", "theoretical_food_cost_amount", "gross_profit_estimate"] } },
+                    "constraint": { "type": "definition" },
+                    "message": "成本/毛利相关指标依赖配方与原材料单位成本：默认按当前成本或成本快照计算，且不包含人工/房租/能耗等间接成本。",
+                    "remediation": "如需按下单日成本、含税/不含税、含损耗等口径，请在映射层补齐成本取数规则（按 as_of_date 有效期/加权均价）并明确说明。",
+                    "tags": ["口径", "成本", "毛利"]
+                  },
+                  {
+                    "id": "food/rule_inventory_expiry_assumptions",
+                    "title": "临期口径声明（批次/效期）",
+                    "severity": "warn",
+                    "when": { "entity": "dataset" },
+                    "constraint": { "type": "definition" },
+                    "message": "临期分析依赖库存批次的 expiry_date 与批次余额 on_hand_qty。若无批次/效期数据，不能给出“临期最严重”的结论。",
+                    "remediation": "建议以 inventory_lots/ inventory_lot_balances 落表；并统一“临期阈值（如≤7天/≤3天）”的业务口径。",
+                    "tags": ["口径", "库存", "临期"]
+                  }
+                ]
+              }
+        fields:
+          - name: order_item_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.order_item_id
+            description: 明细行ID
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.order_id
+            description: 外键：订单
+          - name: dish_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.dish_id
+            description: 外键：菜品
+            ai_context:
+              synonyms: ["菜品ID"]
+          - name: quantity
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.quantity
+            description: 数量
+            ai_context:
+              synonyms: ["份数", "销量"]
+          - name: item_price
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.item_price
+            description: 单价（下单时价格快照）
+            ai_context:
+              synonyms: ["单价"]
+          - name: item_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.item_amount
+            description: 行金额（quantity * item_price - item_discount）
+            ai_context:
+              synonyms: ["行金额", "明细金额"]
+          - name: item_discount_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.item_discount_amount
+            description: 明细折扣金额
+            ai_context:
+              synonyms: ["折扣金额"]
+          - name: served_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_items.served_time
+            description: 出餐/上菜时间（可用于出餐时效分析）
+            dimension:
+              is_time: true
+
+      - name: dishes
+        source: restaurant.public.dishes
+        primary_key: [dish_id]
+        unique_keys:
+          - [dish_id]
+          - [dish_code]
+        description: 菜品主数据（菜品管理服务）
+        ai_context:
+          synonyms:
+            - "菜品"
+            - "菜单"
+        fields:
+          - name: dish_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.dish_id
+            description: 菜品ID
+          - name: dish_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.dish_code
+            description: 菜品编码（业务主键）
+          - name: dish_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.dish_name
+            description: 菜品名称
+            ai_context:
+              synonyms: ["名称", "菜名"]
+          - name: category_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.category_id
+            description: 外键：品类
+          - name: is_active
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.is_active
+            description: 是否上架
+            ai_context:
+              synonyms: ["上架", "可售"]
+          - name: base_price
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.base_price
+            description: 标准定价（非下单快照）
+          - name: created_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dishes.created_at
+            description: 创建时间
+            dimension:
+              is_time: true
+
+      - name: dish_categories
+        source: restaurant.public.dish_categories
+        primary_key: [category_id]
+        unique_keys:
+          - [category_id]
+          - [category_code]
+        description: 菜品品类（菜品管理服务）
+        ai_context:
+          synonyms:
+            - "品类"
+            - "菜品分类"
+        fields:
+          - name: category_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_categories.category_id
+            description: 品类ID
+          - name: category_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_categories.category_name
+            description: 品类名称
+            ai_context:
+              synonyms: ["分类名称", "类目"]
+          - name: parent_category_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_categories.parent_category_id
+            description: 上级品类ID（可用于层级品类）
+
+      - name: stores
+        source: restaurant.public.stores
+        primary_key: [store_id]
+        unique_keys:
+          - [store_id]
+          - [store_code]
+        description: 门店维度（经营分析/组织维度）
+        ai_context:
+          synonyms:
+            - "门店"
+            - "分店"
+            - "店铺"
+        fields:
+          - name: store_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: stores.store_id
+            description: 门店ID
+          - name: store_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: stores.store_code
+            description: 门店编码
+          - name: store_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: stores.store_name
+            description: 门店名称
+            ai_context:
+              synonyms: ["店名"]
+          - name: city
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: stores.city
+            description: 城市
+          - name: region
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: stores.region
+            description: 区域/大区
+
+      - name: customers
+        source: restaurant.public.customers
+        primary_key: [customer_id]
+        unique_keys:
+          - [customer_id]
+          - [customer_number]
+        description: 顾客/会员维度（会员分析）
+        ai_context:
+          synonyms:
+            - "顾客"
+            - "会员"
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "RESTAURANT",
+                "behavior_layer_version": "0.2",
+                "action_types": [
+                  {
+                    "id": "customers/top_members_by_points",
+                    "title": "查询积分最多的会员 TopN",
+                    "kind": "query",
+                    "operation": "rank",
+                    "aggregate": "CustomerAnalytics",
+                    "entity_name": "customers",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["date_range"],
+                        "properties": {
+                          "date_range": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["start", "end"],
+                            "properties": {
+                              "start": { "type": "string", "format": "date-time" },
+                              "end": { "type": "string", "format": "date-time" }
+                            }
+                          },
+                          "top_n": { "type": "integer", "default": 10 },
+                          "include_negative": { "type": "boolean", "default": false }
+                        }
+                      }
+                    },
+                    "examples": ["查询去年积分最多的前10个用户", "今年积分Top20会员是谁？"],
+                    "tags": ["会员", "积分", "排行"]
+                  }
+                ],
+                "rules": []
+              }
+        fields:
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customers.customer_id
+            description: 顾客ID
+          - name: customer_number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customers.customer_number
+            description: 会员编号（业务主键）
+          - name: full_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customers.first_name || ' ' || customers.last_name
+            description: 姓名（计算字段）
+            ai_context:
+              synonyms: ["姓名", "顾客姓名", "会员姓名"]
+          - name: phone
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customers.phone
+            description: 手机号
+            ai_context:
+              synonyms: ["手机号", "电话"]
+          - name: join_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customers.join_date
+            description: 注册时间
+            dimension:
+              is_time: true
+
+      - name: ingredient_categories
+        source: restaurant.public.ingredient_categories
+        primary_key: [category_id]
+        unique_keys:
+          - [category_id]
+        description: 原材料分类（如粮油米醋盐/肉类/海鲜/蔬菜等）
+        ai_context:
+          synonyms: ["原材料分类", "食材分类"]
+        fields:
+          - name: category_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_categories.category_id
+            description: 分类ID
+          - name: category_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_categories.category_name
+            description: 分类名称
+          - name: parent_category_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_categories.parent_category_id
+            description: 上级分类ID
+
+      - name: ingredients
+        source: restaurant.public.ingredients
+        primary_key: [ingredient_id]
+        unique_keys:
+          - [ingredient_id]
+          - [ingredient_code]
+        description: 原材料主数据（仓库食材清单）
+        ai_context:
+          synonyms: ["原材料", "食材", "库存物料"]
+        fields:
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.ingredient_id
+            description: 原材料ID
+          - name: ingredient_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.ingredient_code
+            description: 原材料编码（业务主键）
+          - name: ingredient_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.ingredient_name
+            description: 原材料名称
+          - name: category_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.category_id
+            description: 外键：原材料分类
+          - name: base_uom
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.base_uom
+            description: 基本计量单位
+          - name: is_active
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.is_active
+            description: 是否启用
+          - name: created_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredients.created_at
+            description: 创建时间
+            dimension:
+              is_time: true
+
+      - name: dish_recipe_items
+        source: restaurant.public.dish_recipe_items
+        primary_key: [dish_recipe_item_id]
+        unique_keys:
+          - [dish_recipe_item_id]
+        description: 菜品配方明细（菜品→原材料用量，BOM 粒度）
+        ai_context:
+          synonyms: ["配方", "BOM", "菜品成本配置"]
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "RESTAURANT",
+                "behavior_layer_version": "0.2",
+                "action_types": [
+                  {
+                    "id": "dish_recipe_items/create",
+                    "title": "新增菜品配方明细",
+                    "kind": "command",
+                    "operation": "create",
+                    "aggregate": "DishRecipe",
+                    "entity_name": "dish_recipe_items",
+                    "idempotency": "non_idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["dish_id", "ingredient_id", "quantity", "unit_of_measure"],
+                        "properties": {
+                          "dish_id": { "type": "string" },
+                          "ingredient_id": { "type": "string" },
+                          "quantity": { "type": "number" },
+                          "unit_of_measure": { "type": "string" },
+                          "yield_rate": { "type": "number" },
+                          "effective_from": { "type": "string", "format": "date-time" },
+                          "effective_to": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    },
+                    "examples": ["为菜品配置原材料用量", "新增一道菜的配方项"],
+                    "tags": ["配方", "成本"]
+                  }
+                ],
+                "rules": []
+              }
+        fields:
+          - name: dish_recipe_item_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.dish_recipe_item_id
+            description: 配方明细ID
+          - name: dish_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.dish_id
+            description: 外键：菜品
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.ingredient_id
+            description: 外键：原材料
+          - name: quantity
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.quantity
+            description: 用量（对应 unit_of_measure）
+          - name: unit_of_measure
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.unit_of_measure
+            description: 用量计量单位
+          - name: yield_rate
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.yield_rate
+            description: 出成率/损耗系数（占位字段；1 表示无损耗）
+          - name: is_active
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.is_active
+            description: 是否启用
+          - name: effective_from
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.effective_from
+            description: 生效时间
+            dimension:
+              is_time: true
+          - name: effective_to
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: dish_recipe_items.effective_to
+            description: 失效时间
+            dimension:
+              is_time: true
+
+      - name: ingredient_costs
+        source: restaurant.public.ingredient_costs
+        primary_key: [ingredient_cost_id]
+        unique_keys:
+          - [ingredient_cost_id]
+        description: 原材料单位成本（成本快照/口径由映射层统一）
+        ai_context:
+          synonyms: ["原材料成本", "食材成本"]
+        fields:
+          - name: ingredient_cost_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_costs.ingredient_cost_id
+            description: 成本记录ID
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_costs.ingredient_id
+            description: 外键：原材料
+          - name: unit_cost
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_costs.unit_cost
+            description: 单位成本（占位字段；口径需统一：含税/未税、币种）
+          - name: currency
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_costs.currency
+            description: 币种
+          - name: as_of_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: ingredient_costs.as_of_date
+            description: 成本生效时间/快照时间
+            dimension:
+              is_time: true
+
+      - name: inventory_locations
+        source: restaurant.public.inventory_locations
+        primary_key: [location_id]
+        unique_keys:
+          - [location_id]
+        description: 仓库/库位（门店下的原材料存放位置）
+        ai_context:
+          synonyms: ["仓库", "库位"]
+        fields:
+          - name: location_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_locations.location_id
+            description: 库位ID
+          - name: store_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_locations.store_id
+            description: 外键：门店
+          - name: location_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_locations.location_name
+            description: 库位名称
+          - name: location_type
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_locations.location_type
+            description: 库位类型（仓库/冷库/干货等）
+          - name: is_active
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_locations.is_active
+            description: 是否启用
+          - name: created_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_locations.created_at
+            description: 创建时间
+            dimension:
+              is_time: true
+
+      - name: inventory_balances
+        source: restaurant.public.inventory_balances
+        primary_key: [inventory_balance_id]
+        unique_keys:
+          - [inventory_balance_id]
+        description: 库存余额快照（不含批次）
+        ai_context:
+          synonyms: ["库存余额", "现存量"]
+        fields:
+          - name: inventory_balance_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.inventory_balance_id
+            description: 余额快照ID
+          - name: store_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.store_id
+            description: 外键：门店
+          - name: location_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.location_id
+            description: 外键：库位
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.ingredient_id
+            description: 外键：原材料
+          - name: on_hand_qty
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.on_hand_qty
+            description: 现存数量
+          - name: unit_of_measure
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.unit_of_measure
+            description: 计量单位
+          - name: as_of_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_balances.as_of_time
+            description: 快照时间
+            dimension:
+              is_time: true
+
+      - name: inventory_transactions
+        source: restaurant.public.inventory_transactions
+        primary_key: [inventory_txn_id]
+        unique_keys:
+          - [inventory_txn_id]
+        description: 库存流水（入库/出库/盘点调整，不含批次）
+        ai_context:
+          synonyms: ["出入库", "库存流水"]
+        fields:
+          - name: inventory_txn_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.inventory_txn_id
+            description: 流水ID
+          - name: store_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.store_id
+            description: 外键：门店
+          - name: location_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.location_id
+            description: 外键：库位
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.ingredient_id
+            description: 外键：原材料
+          - name: txn_type
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.txn_type
+            description: 流水类型（IN/OUT/ADJUST）
+          - name: quantity
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.quantity
+            description: 数量（对应 unit_of_measure）
+          - name: unit_of_measure
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.unit_of_measure
+            description: 计量单位
+          - name: txn_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_transactions.txn_time
+            description: 发生时间
+            dimension:
+              is_time: true
+
+      - name: inventory_lots
+        source: restaurant.public.inventory_lots
+        primary_key: [lot_id]
+        unique_keys:
+          - [lot_id]
+        description: 库存批次（用于效期/临期分析）
+        ai_context:
+          synonyms: ["批次", "效期", "临期"]
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "RESTAURANT",
+                "behavior_layer_version": "0.2",
+                "action_types": [
+                  {
+                    "id": "inventory_lots/query_most_expiring",
+                    "title": "查询临期最严重的原材料批次",
+                    "kind": "query",
+                    "operation": "rank",
+                    "aggregate": "InventoryAnalytics",
+                    "entity_name": "inventory_lots",
+                    "idempotency": "idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "as_of_time": { "type": "string", "format": "date-time" },
+                          "expiry_within_days": { "type": "integer", "default": 7 },
+                          "store_id": { "type": "string" },
+                          "top_n": { "type": "integer", "default": 20 }
+                        }
+                      }
+                    },
+                    "examples": ["当前仓库中临期最严重的原材料有哪些？", "列出7天内到期的批次Top20"],
+                    "tags": ["库存", "临期", "预警"]
+                  }
+                ],
+                "rules": []
+              }
+        fields:
+          - name: lot_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lots.lot_id
+            description: 批次ID
+          - name: store_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lots.store_id
+            description: 外键：门店
+          - name: location_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lots.location_id
+            description: 外键：库位
+          - name: ingredient_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lots.ingredient_id
+            description: 外键：原材料
+          - name: received_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lots.received_at
+            description: 入库时间
+            dimension:
+              is_time: true
+          - name: expiry_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lots.expiry_date
+            description: 到期日
+            dimension:
+              is_time: true
+
+      - name: inventory_lot_balances
+        source: restaurant.public.inventory_lot_balances
+        primary_key: [lot_balance_id]
+        unique_keys:
+          - [lot_balance_id]
+        description: 批次库存余额快照（用于临期数量与风险汇总）
+        ai_context:
+          synonyms: ["批次库存", "批次余额"]
+        fields:
+          - name: lot_balance_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.lot_balance_id
+            description: 批次余额ID
+          - name: lot_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.lot_id
+            description: 外键：批次
+          - name: on_hand_qty
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.on_hand_qty
+            description: 批次现存数量
+          - name: as_of_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: inventory_lot_balances.as_of_time
+            description: 快照时间
+            dimension:
+              is_time: true
+
+      - name: membership_tiers
+        source: restaurant.public.membership_tiers
+        primary_key: [tier_id]
+        unique_keys:
+          - [tier_id]
+          - [tier_code]
+        description: 会员等级（权益/门槛）
+        ai_context:
+          synonyms: ["会员等级", "会员层级"]
+        fields:
+          - name: tier_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_tiers.tier_id
+            description: 等级ID
+          - name: tier_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_tiers.tier_code
+            description: 等级编码
+          - name: tier_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_tiers.tier_name
+            description: 等级名称
+          - name: threshold_spend
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_tiers.threshold_spend
+            description: 升级门槛（累计消费金额，占位字段）
+          - name: description
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_tiers.description
+            description: 权益说明
+          - name: created_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_tiers.created_at
+            description: 创建时间
+            dimension:
+              is_time: true
+
+      - name: customer_memberships
+        source: restaurant.public.customer_memberships
+        primary_key: [customer_membership_id]
+        unique_keys:
+          - [customer_membership_id]
+        description: 会员关系（顾客当前会员状态/等级）
+        ai_context:
+          synonyms: ["会员关系", "会员档案"]
+        fields:
+          - name: customer_membership_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_memberships.customer_membership_id
+            description: 会员关系ID
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_memberships.customer_id
+            description: 外键：顾客
+          - name: tier_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_memberships.tier_id
+            description: 外键：会员等级
+          - name: status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_memberships.status
+            description: 状态（Active/Suspended/Expired 等）
+          - name: join_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_memberships.join_date
+            description: 生效时间
+            dimension:
+              is_time: true
+          - name: expiry_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_memberships.expiry_date
+            description: 到期时间
+            dimension:
+              is_time: true
+
+      - name: loyalty_point_ledger
+        source: restaurant.public.loyalty_point_ledger
+        primary_key: [ledger_id]
+        unique_keys:
+          - [ledger_id]
+        description: 会员积分流水
+        ai_context:
+          synonyms: ["积分流水", "会员积分"]
+        fields:
+          - name: ledger_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loyalty_point_ledger.ledger_id
+            description: 流水ID
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loyalty_point_ledger.customer_id
+            description: 外键：顾客
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loyalty_point_ledger.order_id
+            description: 外键：订单（可为空）
+          - name: points_change
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loyalty_point_ledger.points_change
+            description: 积分变动
+          - name: event_time
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: loyalty_point_ledger.event_time
+            description: 发生时间
+            dimension:
+              is_time: true
+
+      - name: coupons
+        source: restaurant.public.coupons
+        primary_key: [coupon_id]
+        unique_keys:
+          - [coupon_id]
+          - [coupon_code]
+        description: 优惠券模板（权益定义：免费菜/满减等）
+        ai_context:
+          synonyms: ["优惠券", "券模板", "免费券"]
+        fields:
+          - name: coupon_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.coupon_id
+            description: 券模板ID
+          - name: coupon_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.coupon_code
+            description: 券模板编码
+          - name: promotion_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.promotion_id
+            description: 外键：活动（可为空）
+          - name: benefit_type
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.benefit_type
+            description: 权益类型（FREE_DISH/DISCOUNT 等，占位字段）
+          - name: free_dish_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.free_dish_id
+            description: 免费菜品ID（当 benefit_type=FREE_DISH 时）
+          - name: valid_from
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.valid_from
+            description: 生效时间
+            dimension:
+              is_time: true
+          - name: valid_to
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.valid_to
+            description: 失效时间
+            dimension:
+              is_time: true
+          - name: is_active
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupons.is_active
+            description: 是否启用
+
+      - name: customer_coupons
+        source: restaurant.public.customer_coupons
+        primary_key: [customer_coupon_id]
+        unique_keys:
+          - [customer_coupon_id]
+        description: 会员持券/发券记录（发放态）
+        ai_context:
+          synonyms: ["发券", "会员优惠券", "持券"]
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "RESTAURANT",
+                "behavior_layer_version": "0.2",
+                "action_types": [
+                  {
+                    "id": "customer_coupons/issue_free_dish_coupon",
+                    "title": "发放免费菜品券",
+                    "kind": "command",
+                    "operation": "issue",
+                    "aggregate": "Coupon",
+                    "entity_name": "customer_coupons",
+                    "idempotency": "non_idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["customer_id", "coupon_id", "issued_at"],
+                        "properties": {
+                          "customer_id": { "type": "string" },
+                          "coupon_id": { "type": "string" },
+                          "issued_at": { "type": "string", "format": "date-time" },
+                          "reason": { "type": "string" }
+                        }
+                      }
+                    },
+                    "examples": ["给会员发一张免费菜券", "给积分Top10会员发券"],
+                    "tags": ["发券", "会员", "运营"]
+                  }
+                ],
+                "rules": []
+              }
+        fields:
+          - name: customer_coupon_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_coupons.customer_coupon_id
+            description: 发券记录ID
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_coupons.customer_id
+            description: 外键：顾客
+          - name: coupon_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_coupons.coupon_id
+            description: 外键：券模板
+          - name: issued_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_coupons.issued_at
+            description: 发放时间
+            dimension:
+              is_time: true
+          - name: status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_coupons.status
+            description: 状态（Issued/Redeemed/Expired/Cancelled 等）
+          - name: redeemed_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: customer_coupons.redeemed_at
+            description: 核销时间（可为空）
+            dimension:
+              is_time: true
+
+      - name: promotion_targets
+        source: restaurant.public.promotion_targets
+        primary_key: [promotion_target_id]
+        unique_keys:
+          - [promotion_target_id]
+        description: 活动触达/目标人群（活动→会员的发放/指派关系）
+        ai_context:
+          synonyms: ["活动触达", "目标人群"]
+        fields:
+          - name: promotion_target_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotion_targets.promotion_target_id
+            description: 触达ID
+          - name: promotion_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotion_targets.promotion_id
+            description: 外键：活动
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotion_targets.customer_id
+            description: 外键：顾客
+          - name: assigned_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotion_targets.assigned_at
+            description: 触达时间
+            dimension:
+              is_time: true
+          - name: channel
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotion_targets.channel
+            description: 触达渠道
+          - name: status
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotion_targets.status
+            description: 状态
+
+      - name: coupon_redemptions
+        source: restaurant.public.coupon_redemptions
+        primary_key: [coupon_redemption_id]
+        unique_keys:
+          - [coupon_redemption_id]
+        description: 券/优惠核销（会员在订单中使用优惠的明细）
+        ai_context:
+          synonyms: ["核销", "用券"]
+        fields:
+          - name: coupon_redemption_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.coupon_redemption_id
+            description: 核销ID
+          - name: customer_coupon_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.customer_coupon_id
+            description: 外键：发券记录（占位字段）
+          - name: coupon_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.coupon_id
+            description: 外键：券模板
+          - name: customer_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.customer_id
+            description: 外键：顾客
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.order_id
+            description: 外键：订单
+          - name: redeemed_at
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.redeemed_at
+            description: 核销时间
+            dimension:
+              is_time: true
+          - name: discount_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: coupon_redemptions.discount_amount
+            description: 抵扣金额
+
+      - name: membership_packages
+        source: restaurant.public.membership_packages
+        primary_key: [package_id]
+        unique_keys:
+          - [package_id]
+          - [package_code]
+        description: 会员套餐（用于“消费达到基本成本即可使用送菜券”等权益设计）
+        ai_context:
+          synonyms: ["会员套餐", "套餐"]
+        custom_extensions:
+          - vendor_name: COMMON
+            data: |
+              {
+                "namespace": "RESTAURANT",
+                "behavior_layer_version": "0.2",
+                "action_types": [
+                  {
+                    "id": "membership_packages/create",
+                    "title": "创建会员套餐",
+                    "kind": "command",
+                    "operation": "create",
+                    "aggregate": "MembershipPackage",
+                    "entity_name": "membership_packages",
+                    "idempotency": "non_idempotent",
+                    "applies_to": { "entity": "dataset" },
+                    "io_schema": {
+                      "input_schema": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["package_code", "package_name", "price", "currency"],
+                        "properties": {
+                          "package_code": { "type": "string" },
+                          "package_name": { "type": "string" },
+                          "price": { "type": "number" },
+                          "currency": { "type": "string" },
+                          "start_date": { "type": "string", "format": "date-time" },
+                          "end_date": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    },
+                    "examples": ["新增一个会员送菜套餐", "创建会员套餐并设置价格"],
+                    "tags": ["会员", "套餐", "运营"]
+                  }
+                ],
+                "rules": []
+              }
+        fields:
+          - name: package_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_packages.package_id
+            description: 套餐ID
+          - name: package_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_packages.package_code
+            description: 套餐编码
+          - name: package_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_packages.package_name
+            description: 套餐名称
+          - name: price
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_packages.price
+            description: 售价
+          - name: currency
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_packages.currency
+            description: 币种
+          - name: is_active
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_packages.is_active
+            description: 是否启用
+
+      - name: membership_package_benefits
+        source: restaurant.public.membership_package_benefits
+        primary_key: [package_benefit_id]
+        unique_keys:
+          - [package_benefit_id]
+        description: 套餐权益（关联送菜券/免费菜等）
+        ai_context:
+          synonyms: ["套餐权益", "权益"]
+        fields:
+          - name: package_benefit_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_package_benefits.package_benefit_id
+            description: 权益ID
+          - name: package_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_package_benefits.package_id
+            description: 外键：套餐
+          - name: benefit_type
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_package_benefits.benefit_type
+            description: 权益类型（COUPON/FREE_DISH 等，占位字段）
+          - name: coupon_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_package_benefits.coupon_id
+            description: 外键：券模板（可为空）
+          - name: free_dish_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_package_benefits.free_dish_id
+            description: 免费菜品ID（可为空）
+          - name: min_spend_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: membership_package_benefits.min_spend_amount
+            description: 使用门槛（占位字段：满足基本成本/最低消费等）
+
+      - name: promotions
+        source: restaurant.public.promotions
+        primary_key: [promotion_id]
+        unique_keys:
+          - [promotion_id]
+          - [promotion_code]
+        description: 运营活动主数据（菜品运营服务：活动、券、折扣）
+        ai_context:
+          synonyms:
+            - "活动"
+            - "促销"
+            - "优惠"
+        fields:
+          - name: promotion_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotions.promotion_id
+            description: 活动ID
+          - name: promotion_code
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotions.promotion_code
+            description: 活动编码
+          - name: promotion_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotions.promotion_name
+            description: 活动名称
+          - name: start_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotions.start_date
+            description: 开始日期
+            dimension:
+              is_time: true
+          - name: end_date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: promotions.end_date
+            description: 结束日期
+            dimension:
+              is_time: true
+
+      - name: order_discounts
+        source: restaurant.public.order_discounts
+        primary_key: [order_discount_id]
+        unique_keys:
+          - [order_discount_id]
+        description: 订单优惠明细（订单与活动的桥表/事实）
+        ai_context:
+          synonyms:
+            - "订单优惠"
+            - "活动使用"
+        fields:
+          - name: order_discount_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_discounts.order_discount_id
+            description: 订单优惠ID
+          - name: order_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_discounts.order_id
+            description: 外键：订单
+          - name: promotion_id
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_discounts.promotion_id
+            description: 外键：活动
+          - name: discount_amount
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: order_discounts.discount_amount
+            description: 优惠金额
+
+      - name: date_dim
+        source: restaurant.public.date_dim
+        primary_key: [date]
+        unique_keys:
+          - [date]
+        description: 日期维度（时间切片）
+        ai_context:
+          synonyms:
+            - "日期"
+            - "日历"
+        fields:
+          - name: date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.date
+            description: 日期
+            dimension:
+              is_time: true
+          - name: year
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.year
+            description: 年
+            dimension:
+              is_time: true
+          - name: month_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.month_name
+            description: 月份（如：2026-01）
+            dimension:
+              is_time: true
+          - name: quarter_name
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.quarter_name
+            description: 季度（如：2026Q1）
+            dimension:
+              is_time: true
+
+    relationships:
+      - name: order_items_to_orders
+        from: order_items
+        to: orders
+        from_columns: [order_id]
+        to_columns: [order_id]
+        ai_context:
+          synonyms: ["订单明细所属订单"]
+
+      - name: orders_to_stores
+        from: orders
+        to: stores
+        from_columns: [store_id]
+        to_columns: [store_id]
+        ai_context:
+          synonyms: ["订单发生门店"]
+
+      - name: orders_to_customers
+        from: orders
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+        ai_context:
+          synonyms: ["谁下的单", "顾客下单关系"]
+
+      - name: order_items_to_dishes
+        from: order_items
+        to: dishes
+        from_columns: [dish_id]
+        to_columns: [dish_id]
+        ai_context:
+          synonyms: ["点了什么菜", "菜品销量关系"]
+
+      - name: dishes_to_categories
+        from: dishes
+        to: dish_categories
+        from_columns: [category_id]
+        to_columns: [category_id]
+        ai_context:
+          synonyms: ["菜品所属品类"]
+
+      - name: ingredients_to_categories
+        from: ingredients
+        to: ingredient_categories
+        from_columns: [category_id]
+        to_columns: [category_id]
+        ai_context:
+          synonyms: ["原材料所属分类"]
+
+      - name: dish_recipe_items_to_dishes
+        from: dish_recipe_items
+        to: dishes
+        from_columns: [dish_id]
+        to_columns: [dish_id]
+        ai_context:
+          synonyms: ["配方所属菜品"]
+
+      - name: dish_recipe_items_to_ingredients
+        from: dish_recipe_items
+        to: ingredients
+        from_columns: [ingredient_id]
+        to_columns: [ingredient_id]
+        ai_context:
+          synonyms: ["配方所用原材料"]
+
+      - name: ingredient_costs_to_ingredients
+        from: ingredient_costs
+        to: ingredients
+        from_columns: [ingredient_id]
+        to_columns: [ingredient_id]
+
+      - name: dish_recipe_items_to_ingredient_costs
+        from: dish_recipe_items
+        to: ingredient_costs
+        from_columns: [ingredient_id]
+        to_columns: [ingredient_id]
+
+      - name: inventory_locations_to_stores
+        from: inventory_locations
+        to: stores
+        from_columns: [store_id]
+        to_columns: [store_id]
+
+      - name: inventory_balances_to_stores
+        from: inventory_balances
+        to: stores
+        from_columns: [store_id]
+        to_columns: [store_id]
+
+      - name: inventory_balances_to_locations
+        from: inventory_balances
+        to: inventory_locations
+        from_columns: [location_id]
+        to_columns: [location_id]
+
+      - name: inventory_balances_to_ingredients
+        from: inventory_balances
+        to: ingredients
+        from_columns: [ingredient_id]
+        to_columns: [ingredient_id]
+
+      - name: inventory_transactions_to_stores
+        from: inventory_transactions
+        to: stores
+        from_columns: [store_id]
+        to_columns: [store_id]
+
+      - name: inventory_transactions_to_locations
+        from: inventory_transactions
+        to: inventory_locations
+        from_columns: [location_id]
+        to_columns: [location_id]
+
+      - name: inventory_transactions_to_ingredients
+        from: inventory_transactions
+        to: ingredients
+        from_columns: [ingredient_id]
+        to_columns: [ingredient_id]
+
+      - name: inventory_lots_to_stores
+        from: inventory_lots
+        to: stores
+        from_columns: [store_id]
+        to_columns: [store_id]
+
+      - name: inventory_lots_to_locations
+        from: inventory_lots
+        to: inventory_locations
+        from_columns: [location_id]
+        to_columns: [location_id]
+
+      - name: inventory_lots_to_ingredients
+        from: inventory_lots
+        to: ingredients
+        from_columns: [ingredient_id]
+        to_columns: [ingredient_id]
+
+      - name: inventory_lot_balances_to_lots
+        from: inventory_lot_balances
+        to: inventory_lots
+        from_columns: [lot_id]
+        to_columns: [lot_id]
+
+      - name: customer_memberships_to_customers
+        from: customer_memberships
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+
+      - name: customer_memberships_to_tiers
+        from: customer_memberships
+        to: membership_tiers
+        from_columns: [tier_id]
+        to_columns: [tier_id]
+
+      - name: loyalty_point_ledger_to_customers
+        from: loyalty_point_ledger
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+
+      - name: loyalty_point_ledger_to_orders
+        from: loyalty_point_ledger
+        to: orders
+        from_columns: [order_id]
+        to_columns: [order_id]
+
+      - name: coupons_to_promotions
+        from: coupons
+        to: promotions
+        from_columns: [promotion_id]
+        to_columns: [promotion_id]
+
+      - name: coupons_to_free_dishes
+        from: coupons
+        to: dishes
+        from_columns: [free_dish_id]
+        to_columns: [dish_id]
+
+      - name: customer_coupons_to_customers
+        from: customer_coupons
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+
+      - name: customer_coupons_to_coupons
+        from: customer_coupons
+        to: coupons
+        from_columns: [coupon_id]
+        to_columns: [coupon_id]
+
+      - name: promotion_targets_to_promotions
+        from: promotion_targets
+        to: promotions
+        from_columns: [promotion_id]
+        to_columns: [promotion_id]
+
+      - name: promotion_targets_to_customers
+        from: promotion_targets
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+
+      - name: coupon_redemptions_to_orders
+        from: coupon_redemptions
+        to: orders
+        from_columns: [order_id]
+        to_columns: [order_id]
+
+      - name: coupon_redemptions_to_customers
+        from: coupon_redemptions
+        to: customers
+        from_columns: [customer_id]
+        to_columns: [customer_id]
+
+      - name: coupon_redemptions_to_coupons
+        from: coupon_redemptions
+        to: coupons
+        from_columns: [coupon_id]
+        to_columns: [coupon_id]
+
+      - name: membership_package_benefits_to_packages
+        from: membership_package_benefits
+        to: membership_packages
+        from_columns: [package_id]
+        to_columns: [package_id]
+
+      - name: membership_package_benefits_to_coupons
+        from: membership_package_benefits
+        to: coupons
+        from_columns: [coupon_id]
+        to_columns: [coupon_id]
+
+      - name: membership_package_benefits_to_dishes
+        from: membership_package_benefits
+        to: dishes
+        from_columns: [free_dish_id]
+        to_columns: [dish_id]
+
+      - name: order_discounts_to_orders
+        from: order_discounts
+        to: orders
+        from_columns: [order_id]
+        to_columns: [order_id]
+        ai_context:
+          synonyms: ["订单优惠所属订单"]
+
+      - name: order_discounts_to_promotions
+        from: order_discounts
+        to: promotions
+        from_columns: [promotion_id]
+        to_columns: [promotion_id]
+        ai_context:
+          synonyms: ["订单使用活动"]
+
+      - name: orders_to_paid_date
+        from: orders
+        to: date_dim
+        from_columns: [paid_time]
+        to_columns: [date]
+        ai_context:
+          synonyms: ["支付日期关系"]
+      - name: order_items_to_served_date
+        from: order_items
+        to: date_dim
+        from_columns: [served_time]
+        to_columns: [date]
+        ai_context:
+          synonyms: ["出餐日期关系"]
+
+    metrics:
+      - name: total_order_items
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(order_items.order_item_id)
+        description: 点餐明细总行数（可用于总点单量趋势）
+        ai_context:
+          synonyms: ["点单量", "明细数"]
+
+      - name: total_orders
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(orders.order_id)
+        description: 订单总数（包含所有状态；常用口径建议用 paid_orders）
+        ai_context:
+          synonyms: ["订单量", "下单量"]
+
+      - name: paid_orders
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.paid_time IS NOT NULL AND orders.order_status = 'PAID' THEN 1 ELSE 0 END)
+        description: 已支付订单数（默认口径）
+        ai_context:
+          synonyms: ["支付订单数", "成交订单数"]
+
+      - name: gross_revenue
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN orders.total_amount ELSE 0 END)
+        description: 营收（默认：已支付订单 total_amount 之和）
+        ai_context:
+          synonyms: ["营业额", "销售额", "收入"]
+
+      - name: dish_units_sold
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN order_items.quantity ELSE 0 END)
+        description: 菜品销量（默认口径：已支付订单明细 quantity 之和；需经 orders join）
+        ai_context:
+          synonyms: ["销量", "售出份数", "卖了多少"]
+
+      - name: discount_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(order_discounts.discount_amount)
+        description: 优惠金额总计（订单优惠明细之和）
+        ai_context:
+          synonyms: ["优惠额", "折扣金额"]
+
+      - name: refund_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'REFUNDED' THEN orders.total_amount ELSE 0 END)
+        description: 退款金额（口径示例：退款订单 total_amount 之和，实际可拆退款流水表）
+        ai_context:
+          synonyms: ["退款", "退单金额"]
+
+      - name: avg_prep_time_minutes
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: AVG(CASE WHEN order_items.served_time IS NOT NULL THEN (order_items.served_time - orders.order_time) END)
+        description: 平均出餐时长（示例表达式；单位取决于数据库时间差语义）
+        ai_context:
+          synonyms: ["出餐时效", "上菜速度", "制作时长"]
+
+      - name: dish_theoretical_unit_cost
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(dish_recipe_items.quantity * ingredient_costs.unit_cost * COALESCE(dish_recipe_items.yield_rate, 1))
+        description: 菜品单份理论成本（按 dish_id 分组；口径：Σ配方用量×原材料单位成本×损耗系数）
+        ai_context:
+          synonyms: ["菜品成本", "单份成本", "理论成本"]
+
+      - name: theoretical_food_cost_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN order_items.quantity * dish_recipe_items.quantity * ingredient_costs.unit_cost * COALESCE(dish_recipe_items.yield_rate, 1) ELSE 0 END)
+        description: 理论原材料成本金额（口径：已支付订单的销量×配方用量×原材料单位成本）
+        ai_context:
+          synonyms: ["食材成本", "原材料成本", "food cost"]
+
+      - name: gross_profit_estimate
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN order_items.item_amount ELSE 0 END) - SUM(CASE WHEN orders.order_status = 'PAID' THEN order_items.quantity * dish_recipe_items.quantity * ingredient_costs.unit_cost * COALESCE(dish_recipe_items.yield_rate, 1) ELSE 0 END)
+        description: 估算毛利（口径：已支付订单明细行金额 - 理论原材料成本金额；不含人工/房租/能耗等）
+        ai_context:
+          synonyms: ["毛利", "gross profit"]
+
+      - name: inventory_on_hand_qty
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(inventory_balances.on_hand_qty)
+        description: 库存现存量（不含批次；口径：库存余额快照 Σon_hand_qty）
+        ai_context:
+          synonyms: ["库存", "现存量"]
+
+      - name: expiring_lot_on_hand_qty
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(inventory_lot_balances.on_hand_qty)
+        description: 临期批次现存量（口径：批次余额 Σon_hand_qty；临期阈值需在查询/分析时指定）
+        ai_context:
+          synonyms: ["临期库存", "到期风险"]
+
+      - name: member_points_earned
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN loyalty_point_ledger.points_change > 0 THEN loyalty_point_ledger.points_change ELSE 0 END)
+        description: 会员获得积分（按 customer_id 分组；口径：Σ正向 points_change；时间范围由查询指定）
+        ai_context:
+          synonyms: ["积分", "累计积分"]
+
+      - name: member_points_net
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(loyalty_point_ledger.points_change)
+        description: 会员积分净变动（按 customer_id 分组；口径：Σpoints_change；时间范围由查询指定）
+        ai_context:
+          synonyms: ["积分净值", "积分变动"]
+
+      - name: member_paid_spend
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN orders.total_amount ELSE 0 END)
+        description: 会员消费金额（按 customer_id 分组；口径：已支付订单 total_amount 汇总）
+        ai_context:
+          synonyms: ["会员消费", "会员实付"]
+
+      - name: member_visit_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT CASE WHEN orders.order_status = 'PAID' THEN orders.order_id END)
+        description: 会员到店/成交次数（按 customer_id 分组；口径：已支付订单数）
+        ai_context:
+          synonyms: ["会员到店次数", "消费次数"]
+
+      - name: member_avg_ticket
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN orders.order_status = 'PAID' THEN orders.total_amount ELSE 0 END) / NULLIF(COUNT(DISTINCT CASE WHEN orders.order_status = 'PAID' THEN orders.order_id END), 0)
+        description: 会员客单价（按 customer_id 分组；口径：已支付金额/已支付订单数）
+        ai_context:
+          synonyms: ["会员客单价", "平均消费"]
+
+      - name: promotion_targeted_member_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT promotion_targets.customer_id)
+        description: 活动触达会员数（口径：promotion_targets 去重 customer_id）
+        ai_context:
+          synonyms: ["触达人数", "目标会员数"]
+
+      - name: coupon_redemption_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(DISTINCT coupon_redemptions.coupon_redemption_id)
+        description: 优惠核销次数（口径：coupon_redemptions 记录数）
+        ai_context:
+          synonyms: ["核销次数", "用券次数"]
+
+      - name: coupon_redemption_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(coupon_redemptions.discount_amount)
+        description: 核销抵扣金额（口径：coupon_redemptions.discount_amount 汇总）
+        ai_context:
+          synonyms: ["核销金额", "用券金额"]

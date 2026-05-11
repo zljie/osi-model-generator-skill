@@ -1,0 +1,1272 @@
+# yaml-language-server: $schema=../../bundled_osi/core-spec/osi-schema.json
+
+version: 0.1.2
+semantic_model:
+  - name: salesforce_crm_ontology_model
+    description: Salesforce CRM 语义本体模型(销售管道/客户与联系人/活动/工单/产品与报价)
+    ai_context:
+      instructions: 用于 CRM 经营分析与问答。核心事实表为 opportunities(商机)与 opportunity_line_items(商机产品明细),并结合 tasks(跟进活动)与 cases(客户工单)进行全链路分析。默认以
+        is_closed=true 且 is_won=true 作为赢单口径；如需包含已关闭未赢单,请明确说明。
+      synonyms:
+        - Salesforce
+        - CRM
+        - 客户关系管理
+        - 销售管道
+        - 商机
+      examples:
+        - 本月赢单金额是多少？
+        - 按销售人员统计赢单率
+        - 按行业看管道加权金额
+        - 某客户的商机明细有哪些？
+        - 本月新增线索数与转化率是多少？
+        - 工单平均解决时长是多少？
+    datasets:
+      - name: opportunities
+        source: salesforce.salesforce.opportunity
+        primary_key:
+          - opportunity_id
+        unique_keys:
+          - - opportunity_id
+          - - opportunity_sf_id
+        description: 商机事实表(销售管道核心)
+        ai_context:
+          synonyms:
+            - 商机
+            - 销售机会
+            - 机会
+            - 管道
+        fields:
+          - name: opportunity_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.opportunity_id
+            description: 商机内部ID
+          - name: opportunity_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.opportunity_sf_id
+            description: Salesforce Opportunity.Id
+            ai_context:
+              synonyms:
+                - Opportunity.Id
+                - SFID
+          - name: account_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.account_id
+            description: 外键:Account
+            ai_context:
+              synonyms:
+                - 客户ID
+                - AccountId
+          - name: owner_user_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.owner_user_id
+            description: 外键:Owner(User)
+            ai_context:
+              synonyms:
+                - 负责人
+                - 销售人员ID
+                - OwnerId
+          - name: stage_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.stage_name
+            description: 阶段(如 Prospecting/Proposal/Closed Won 等)
+            ai_context:
+              synonyms:
+                - 阶段
+                - 商机阶段
+          - name: probability
+            type: Number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.probability
+            description: 成交概率(0~1 或 0~100,口径依赖源系统)
+            ai_context:
+              synonyms:
+                - 概率
+                - 成交概率
+          - name: amount
+            type: Number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.amount
+            description: 商机金额(通常为预估金额/报价金额)
+            ai_context:
+              synonyms:
+                - 商机金额
+                - 金额
+          - name: expected_revenue
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.expected_revenue
+            description: 期望收入(可能等于 amount*probability,依赖系统配置)
+            ai_context:
+              synonyms:
+                - 期望收入
+                - 加权收入
+          - name: is_closed
+            type: Boolean
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.is_closed
+            description: 是否已关闭
+          - name: is_won
+            type: Boolean
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.is_won
+            description: 是否赢单
+            ai_context:
+              synonyms:
+                - 赢单
+                - 成交
+          - name: created_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.created_date
+            description: 创建时间
+            dimension:
+              is_time: true
+          - name: close_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunities.close_date
+            description: 预计/实际关闭日期
+            dimension:
+              is_time: true
+      - name: opportunity_line_items
+        source: salesforce.salesforce.opportunity_line_item
+        primary_key:
+          - opportunity_line_item_id
+        unique_keys:
+          - - opportunity_line_item_id
+          - - opportunity_line_item_sf_id
+        description: 商机产品明细事实表(产品/价格/数量粒度)
+        ai_context:
+          synonyms:
+            - 商机明细
+            - 产品明细
+            - 报价明细
+        fields:
+          - name: opportunity_line_item_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.opportunity_line_item_id
+            description: 明细内部ID
+          - name: opportunity_line_item_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.opportunity_line_item_sf_id
+            description: Salesforce OpportunityLineItem.Id
+          - name: opportunity_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.opportunity_id
+            description: 外键:Opportunity
+          - name: product_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.product_id
+            description: 外键:Product2
+          - name: pricebook_entry_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.pricebook_entry_id
+            description: 外键:PricebookEntry
+          - name: quantity
+            type: Number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.quantity
+            description: 数量
+          - name: unit_price
+            type: Number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.unit_price
+            description: 单价(成交/报价口径依赖业务)
+          - name: total_price
+            type: Number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.total_price
+            description: 行总价(quantity * unit_price)
+          - name: created_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: opportunity_line_items.created_date
+            description: 创建时间
+            dimension:
+              is_time: true
+      - name: tasks
+        source: salesforce.salesforce.task
+        primary_key:
+          - task_id
+        unique_keys:
+          - - task_id
+          - - task_sf_id
+        description: 活动/跟进事实表(电话、邮件、会议等)
+        ai_context:
+          synonyms:
+            - 活动
+            - 跟进
+            - 拜访
+            - 任务
+        fields:
+          - name: task_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.task_id
+            description: 活动内部ID
+          - name: task_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.task_sf_id
+            description: Salesforce Task.Id
+          - name: owner_user_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.owner_user_id
+            description: 外键:User(负责人)
+          - name: what_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.what_id
+            description: 关联对象ID(Opportunity/Account 等,视实现而定)
+            ai_context:
+              synonyms:
+                - 关联对象
+                - WhatId
+          - name: activity_type
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.activity_type
+            description: 活动类型(Call/Email/Meeting等)
+          - name: status
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.status
+            description: 状态(Completed/Open等)
+          - name: activity_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.activity_date
+            description: 活动日期
+            dimension:
+              is_time: true
+          - name: created_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: tasks.created_date
+            description: 创建时间
+            dimension:
+              is_time: true
+      - name: cases
+        source: salesforce.salesforce.case
+        primary_key:
+          - case_id
+        unique_keys:
+          - - case_id
+          - - case_sf_id
+          - - case_number
+        description: 客户工单事实表(支持与服务运营)
+        ai_context:
+          synonyms:
+            - 工单
+            - Case
+            - 客服工单
+        fields:
+          - name: case_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.case_id
+            description: 工单内部ID
+          - name: case_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.case_sf_id
+            description: Salesforce Case.Id
+          - name: case_number
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.case_number
+            description: 工单编号(业务主键)
+          - name: account_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.account_id
+            description: 外键:Account
+          - name: contact_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.contact_id
+            description: 外键:Contact
+          - name: owner_user_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.owner_user_id
+            description: 外键:Owner(User)
+          - name: status
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.status
+            description: 工单状态
+          - name: priority
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.priority
+            description: 优先级
+          - name: created_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.created_date
+            description: 创建时间
+            dimension:
+              is_time: true
+          - name: closed_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: cases.closed_date
+            description: 关闭时间
+            dimension:
+              is_time: true
+      - name: accounts
+        source: salesforce.salesforce.account
+        primary_key:
+          - account_id
+        unique_keys:
+          - - account_id
+          - - account_sf_id
+        description: 客户维度(Account)
+        ai_context:
+          synonyms:
+            - 客户
+            - 公司
+            - Account
+        fields:
+          - name: account_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: accounts.account_id
+            description: 客户内部ID
+          - name: account_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: accounts.account_sf_id
+            description: Salesforce Account.Id
+          - name: account_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: accounts.account_name
+            description: 客户名称
+            ai_context:
+              synonyms:
+                - 公司名称
+                - 客户名
+          - name: industry
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: accounts.industry
+            description: 行业
+          - name: segment
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: accounts.segment
+            description: 客户分层/细分
+          - name: created_date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: accounts.created_date
+            description: 创建时间
+            dimension:
+              is_time: true
+      - name: contacts
+        source: salesforce.salesforce.contact
+        primary_key:
+          - contact_id
+        unique_keys:
+          - - contact_id
+          - - contact_sf_id
+        description: 联系人维度(Contact)
+        ai_context:
+          synonyms:
+            - 联系人
+            - Contact
+        fields:
+          - name: contact_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: contacts.contact_id
+            description: 联系人内部ID
+          - name: contact_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: contacts.contact_sf_id
+            description: Salesforce Contact.Id
+          - name: account_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: contacts.account_id
+            description: 外键:Account
+          - name: full_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: contacts.first_name || ' ' || contacts.last_name
+            description: 联系人姓名(计算字段)
+            ai_context:
+              synonyms:
+                - 姓名
+                - 联系人姓名
+          - name: email
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: contacts.email
+            description: 邮箱
+            ai_context:
+              synonyms:
+                - 电子邮箱
+          - name: phone
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: contacts.phone
+            description: 电话
+      - name: users
+        source: salesforce.salesforce.user
+        primary_key:
+          - user_id
+        unique_keys:
+          - - user_id
+          - - user_sf_id
+        description: 用户维度(销售/客服人员)
+        ai_context:
+          synonyms:
+            - 销售
+            - 客服
+            - 员工
+            - User
+        fields:
+          - name: user_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: users.user_id
+            description: 用户内部ID
+          - name: user_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: users.user_sf_id
+            description: Salesforce User.Id
+          - name: full_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: users.first_name || ' ' || users.last_name
+            description: 姓名(计算字段)
+          - name: role_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: users.role_name
+            description: 角色
+          - name: team
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: users.team
+            description: 团队/组织
+          - name: region
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: users.region
+            description: 区域
+      - name: products
+        source: salesforce.salesforce.product2
+        primary_key:
+          - product_id
+        unique_keys:
+          - - product_id
+          - - product_sf_id
+          - - product_code
+        description: 产品维度(Product2)
+        ai_context:
+          synonyms:
+            - 产品
+            - 商品
+            - Product
+        fields:
+          - name: product_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: products.product_id
+            description: 产品内部ID
+          - name: product_sf_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: products.product_sf_id
+            description: Salesforce Product2.Id
+          - name: product_code
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: products.product_code
+            description: 产品编码
+          - name: product_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: products.product_name
+            description: 产品名称
+          - name: family
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: products.family
+            description: 产品族/类别
+      - name: pricebook_entries
+        source: salesforce.salesforce.pricebook_entry
+        primary_key:
+          - pricebook_entry_id
+        unique_keys:
+          - - pricebook_entry_id
+          - - pricebook_entry_sf_id
+        description: 价格簿条目(PricebookEntry,产品-价格)
+        fields:
+          - name: pricebook_entry_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: pricebook_entries.pricebook_entry_id
+            description: 价格簿条目ID
+          - name: pricebook_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: pricebook_entries.pricebook_id
+            description: 外键:Pricebook2
+          - name: product_id
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: pricebook_entries.product_id
+            description: 外键:Product2
+          - name: unit_price
+            type: Number
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: pricebook_entries.unit_price
+            description: 标准单价
+      - name: date_dim
+        source: common.public.date_dim
+        primary_key:
+          - date
+        unique_keys:
+          - - date
+        description: 日期维度(时间切片)
+        ai_context:
+          synonyms:
+            - 日期
+            - 日历
+            - 时间维度
+        fields:
+          - name: date
+            type: Date
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.date
+            description: 日期
+            dimension:
+              is_time: true
+          - name: year
+            type: Integer
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.year
+            description: 年
+            dimension:
+              is_time: true
+          - name: month_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.month_name
+            description: 月份
+            dimension:
+              is_time: true
+          - name: quarter_name
+            type: String
+            expression:
+              dialects:
+                - dialect: ANSI_SQL
+                  expression: date_dim.quarter_name
+            description: 季度
+            dimension:
+              is_time: true
+    relationships:
+      - name: opportunities_to_accounts
+        from: opportunities
+        to: accounts
+        from_columns:
+          - account_id
+        to_columns:
+          - account_id
+        ai_context:
+          synonyms:
+            - 商机所属客户
+      - name: opportunities_to_owner
+        from: opportunities
+        to: users
+        from_columns:
+          - owner_user_id
+        to_columns:
+          - user_id
+        ai_context:
+          synonyms:
+            - 商机负责人
+      - name: oli_to_opportunity
+        from: opportunity_line_items
+        to: opportunities
+        from_columns:
+          - opportunity_id
+        to_columns:
+          - opportunity_id
+        ai_context:
+          synonyms:
+            - 商机明细所属商机
+      - name: oli_to_product
+        from: opportunity_line_items
+        to: products
+        from_columns:
+          - product_id
+        to_columns:
+          - product_id
+        ai_context:
+          synonyms:
+            - 商机明细对应产品
+      - name: oli_to_pricebook_entry
+        from: opportunity_line_items
+        to: pricebook_entries
+        from_columns:
+          - pricebook_entry_id
+        to_columns:
+          - pricebook_entry_id
+        ai_context:
+          synonyms:
+            - 明细对应价格簿条目
+      - name: contacts_to_accounts
+        from: contacts
+        to: accounts
+        from_columns:
+          - account_id
+        to_columns:
+          - account_id
+        ai_context:
+          synonyms:
+            - 联系人所属客户
+      - name: cases_to_accounts
+        from: cases
+        to: accounts
+        from_columns:
+          - account_id
+        to_columns:
+          - account_id
+        ai_context:
+          synonyms:
+            - 工单所属客户
+      - name: cases_to_contacts
+        from: cases
+        to: contacts
+        from_columns:
+          - contact_id
+        to_columns:
+          - contact_id
+        ai_context:
+          synonyms:
+            - 工单关联联系人
+      - name: cases_to_owner
+        from: cases
+        to: users
+        from_columns:
+          - owner_user_id
+        to_columns:
+          - user_id
+        ai_context:
+          synonyms:
+            - 工单负责人
+      - name: tasks_to_owner
+        from: tasks
+        to: users
+        from_columns:
+          - owner_user_id
+        to_columns:
+          - user_id
+        ai_context:
+          synonyms:
+            - 活动负责人
+      - name: opportunities_to_close_date
+        from: opportunities
+        to: date_dim
+        from_columns:
+          - close_date
+        to_columns:
+          - date
+        ai_context:
+          synonyms:
+            - 关闭日期关系
+      - name: opportunities_to_created_date
+        from: opportunities
+        to: date_dim
+        from_columns:
+          - created_date
+        to_columns:
+          - date
+        ai_context:
+          synonyms:
+            - 创建日期关系
+      - name: cases_to_created_date
+        from: cases
+        to: date_dim
+        from_columns:
+          - created_date
+        to_columns:
+          - date
+        ai_context:
+          synonyms:
+            - 工单创建日期关系
+    metrics:
+      - name: won_opportunity_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN 1 ELSE 0 END)
+        description: 赢单商机数(已关闭且赢单)
+        ai_context:
+          synonyms:
+            - 赢单数
+            - 成交商机数
+      - name: closed_opportunity_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true THEN 1 ELSE 0 END)
+        description: 已关闭商机数(含赢单与丢单)
+        ai_context:
+          synonyms:
+            - 关闭商机数
+            - 已关闭数
+      - name: win_rate
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN 1 ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN opportunities.is_closed = true THEN 1 ELSE 0 END), 0)
+        description: 赢单率(赢单数 / 已关闭数)
+        ai_context:
+          synonyms:
+            - 成交率
+            - 赢单率
+      - name: won_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN opportunities.amount
+                ELSE 0 END)
+        description: 赢单金额(已关闭且赢单的 amount 汇总)
+        ai_context:
+          synonyms:
+            - 成交金额
+            - 赢单金额
+            - 签约金额
+      - name: weighted_pipeline_amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = false THEN opportunities.amount * opportunities.probability
+                ELSE 0 END)
+        description: 加权管道金额(未关闭商机 amount * probability)
+        ai_context:
+          synonyms:
+            - 加权管道
+            - 加权金额
+            - 预计收入
+      - name: avg_sales_cycle_days
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: AVG(CASE WHEN opportunities.is_closed = true THEN (opportunities.close_date - opportunities.created_date)
+                END)
+        description: 平均销售周期(关闭日期 - 创建日期；单位依赖底层日期类型/引擎)
+        ai_context:
+          synonyms:
+            - 销售周期
+            - 成交周期
+      - name: avg_deal_size
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN opportunities.amount
+                ELSE 0 END) / NULLIF(SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN 1 ELSE
+                0 END), 0)
+        description: 平均客单(赢单金额 / 赢单数)
+        ai_context:
+          synonyms:
+            - 平均单笔金额
+            - 平均成交金额
+      - name: won_product_revenue
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN opportunity_line_items.total_price
+                ELSE 0 END)
+        description: 赢单产品营收(按商机产品明细 total_price 汇总；需通过 relationship join 到 opportunities 过滤赢单)
+        ai_context:
+          synonyms:
+            - 产品营收
+            - 按产品的成交额
+      - name: product_units_sold
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN opportunity_line_items.quantity
+                ELSE 0 END)
+        description: 产品售出数量(赢单商机对应明细 quantity 汇总)
+        ai_context:
+          synonyms:
+            - 产品销量
+            - 卖出数量
+      - name: revenue_per_account
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN opportunities.is_closed = true AND opportunities.is_won = true THEN opportunities.amount
+                ELSE 0 END) / NULLIF(COUNT(DISTINCT accounts.account_id), 0)
+        description: 每客户平均收入(赢单金额 / 客户去重数；口径为所有客户)
+        ai_context:
+          synonyms:
+            - 客户价值
+            - 每客户收入
+      - name: activity_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: COUNT(tasks.task_id)
+        description: 活动数量(跟进/电话/邮件等)
+        ai_context:
+          synonyms:
+            - 跟进次数
+            - 活动量
+      - name: completed_activity_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN tasks.status = 'Completed' THEN 1 ELSE 0 END)
+        description: 已完成活动数量
+        ai_context:
+          synonyms:
+            - 已完成跟进
+            - 完成活动数
+      - name: open_case_count
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: SUM(CASE WHEN cases.closed_date IS NULL THEN 1 ELSE 0 END)
+        description: 未关闭工单数
+        ai_context:
+          synonyms:
+            - 未结工单
+            - 未关闭工单
+      - name: avg_case_resolution_days
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: AVG(CASE WHEN cases.closed_date IS NOT NULL THEN (cases.closed_date - cases.created_date) END)
+        description: 平均工单解决时长(关闭-创建；单位依赖底层日期类型/引擎)
+        ai_context:
+          synonyms:
+            - 工单解决时长
+            - 平均解决时间
+    behavior:
+      namespace: PALANTIR
+      behavior_layer_version: '0.1'
+      actions:
+        - id: opportunities/create
+          name: 创建商机
+          kind: command
+          operation: create
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required:
+                - account_id
+                - stage_name
+                - close_date
+              properties:
+                account_id:
+                  type: string
+                owner_user_id:
+                  type: string
+                stage_name:
+                  type: string
+                amount:
+                  type: number
+                probability:
+                  type: number
+                close_date:
+                  type: string
+          examples:
+            - 为某客户创建一个新商机
+            - 新建商机并设置预计关闭日期
+          labels:
+            - crud
+            - 商机
+            - 写入
+        - id: opportunities/read
+          name: 查询商机（按ID）
+          kind: query
+          operation: read
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required:
+                - opportunity_id
+              properties:
+                opportunity_id:
+                  type: string
+          examples:
+            - 查询某个商机详情
+          labels:
+            - crud
+            - 读取
+        - id: opportunities/list
+          name: 分页列出商机
+          kind: query
+          operation: list
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              properties:
+                page:
+                  type: number
+                page_size:
+                  type: number
+                owner_user_id:
+                  type: string
+                account_id:
+                  type: string
+                stage_name:
+                  type: string
+                is_closed:
+                  type: boolean
+          examples:
+            - 列出某销售人员的未关闭商机
+            - 按阶段分页查看商机
+          labels:
+            - crud
+            - 列表
+            - 管道
+        - id: opportunities/update
+          name: 更新商机（字段更新）
+          kind: command
+          operation: update
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required:
+                - opportunity_id
+              properties:
+                opportunity_id:
+                  type: string
+                stage_name:
+                  type: string
+                amount:
+                  type: number
+                probability:
+                  type: number
+                close_date:
+                  type: string
+          examples:
+            - 更新商机金额与阶段
+            - 调整预计关闭日期
+          labels:
+            - crud
+            - 更新
+        - id: opportunities/delete
+          name: 删除商机（谨慎）
+          kind: command
+          operation: delete
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required:
+                - opportunity_id
+              properties:
+                opportunity_id:
+                  type: string
+          examples:
+            - 删除误建商机
+          labels:
+            - crud
+            - 删除
+            - 治理
+        - id: opportunities/close_won
+          name: 赢单（关闭为成交）
+          kind: command
+          operation: update
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required:
+                - opportunity_id
+                - close_date
+              properties:
+                opportunity_id:
+                  type: string
+                close_date:
+                  type: string
+                amount:
+                  type: number
+          examples:
+            - 将商机标记为 Closed Won
+            - 完成成交并记录关闭日期
+          labels:
+            - ddd
+            - 赢单
+            - 业务动作
+        - id: opportunities/close_lost
+          name: 丢单（关闭为失败）
+          kind: command
+          operation: update
+          aggregate: Opportunity
+          entity_name: opportunities
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              required:
+                - opportunity_id
+                - close_date
+              properties:
+                opportunity_id:
+                  type: string
+                close_date:
+                  type: string
+                lost_reason:
+                  type: string
+          examples:
+            - 将商机标记为 Closed Lost 并记录原因
+          labels:
+            - ddd
+            - 丢单
+            - 业务动作
+        - id: opportunities/funnel_report
+          name: 生成销售漏斗报表
+          description: 按时间范围与销售团队生成漏斗：各阶段商机数、金额、转化率。
+          applies_to:
+            entity: dataset
+          io_schema:
+            input_schema:
+              type: object
+              additionalProperties: false
+              properties:
+                start_date:
+                  type: string
+                  description: 开始日期（YYYY-MM-DD）
+                end_date:
+                  type: string
+                  description: 结束日期（YYYY-MM-DD）
+                team:
+                  type: string
+                  description: 销售团队（可选）
+          examples:
+            - 按阶段看本月商机漏斗
+            - 各销售团队的漏斗转化率
+          labels:
+            - funnel
+            - pipeline
+            - sales
+      rules:
+        - id: crm/rule_win_definition
+          name: 赢单口径定义
+          severity: warn
+          when:
+            entity: metric
+            selectors:
+              metric_names:
+                - won_opportunity_count
+                - won_amount
+                - win_rate
+          constraint:
+            type: filter
+          message: 赢单默认口径：is_closed=true 且 is_won=true。
+          remediation: 如需按 StageName(Closed Won) 口径，请统一为同一逻辑，并在模型 instructions 中说明优先级。
+          labels:
+            - 口径
+            - 赢单
+    custom_extensions:
+      - vendor_name: SALESFORCE
+        data: |
+          {
+            "version": "0.1.1",
+            "crm_domain": "salesforce",
+            "objects": {
+              "Account": "accounts",
+              "Contact": "contacts",
+              "User": "users",
+              "Opportunity": "opportunities",
+              "OpportunityLineItem": "opportunity_line_items",
+              "Task": "tasks",
+              "Case": "cases",
+              "Product2": "products",
+              "PricebookEntry": "pricebook_entries"
+            },
+            "recommended_grain": {
+              "sales_fact": "opportunities",
+              "product_fact": "opportunity_line_items",
+              "service_fact": "cases",
+              "activity_fact": "tasks"
+            }
+          }

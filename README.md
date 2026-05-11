@@ -123,6 +123,10 @@ Skill 的工作流（详见 `SKILL.md`）：
 | [`restaurant_ops_min.yaml`](./references/examples/restaurant_ops_min.yaml) | 餐饮经营分析最小骨架 | ✅ PASS |
 | [`sap_p2p_min.yaml`](./references/examples/sap_p2p_min.yaml) | SAP P2P 缺料预警精简版 + 行为层 | ✅ PASS |
 | [`dtp_semantic_model.yaml`](./references/examples/dtp_semantic_model.yaml) | 完整 DTP（Demand-to-Procurement）语义模型 | ⚠ 部分 rule 缺 `message`（待修） |
+| [`library_semantic_model.yaml`](./references/examples/library_semantic_model.yaml) | 图书馆借阅（loans/books/members/branches）+ 行为层 | ✅ PASS |
+| [`crm_semantic_model.yaml`](./references/examples/crm_semantic_model.yaml) | Salesforce CRM 销售管道（opportunities/accounts/tasks/cases）+ 行为层 | ✅ PASS |
+| [`food_semantic_model_semantic_v2.yaml`](./references/examples/food_semantic_model_semantic_v2.yaml) | 餐饮经营分析（订单/菜品/库存/会员/活动）+ 行为层 | ✅ PASS |
+| [`old/`](./references/examples/old/) | 旧版（v0.1.1，行为层嵌在 `custom_extensions`）原件，供对比参考 | — |
 | [`actions.yaml`](./references/examples/actions.yaml) / [`rules.yaml`](./references/examples/rules.yaml) | 行为层 actions / rules 语法参考集（markdown） | — |
 
 ---
