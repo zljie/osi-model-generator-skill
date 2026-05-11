@@ -322,7 +322,134 @@ custom_extensions:
 - 你自己的平台命名空间（如 `PALANTIR`/`SAP_P2P`）写在 `data.namespace`，不要写进 `vendor_name`
 - `CustomExtension` 仅允许 `vendor_name`、`data` 两个键，`data` 必须是字符串
 
-#### 6.3 Palantir 风格“任务/争议/告警”闭环如何落到 behavior（速用模板）
+#### 6.3 Action 生成规则（强约束）：每个 Dataset 都要有查询 Action；业务查询也是 Action
+
+> 这是 Skill 的**生成期硬约束**。不是 schema 强制，但凡是 Skill 产出的最终行为层，都必须满足；缺失视为生成不合规。
+
+**6.3.1 每个 Dataset 至少要有的标准查询 Action（最小集）**
+
+为 `datasets` 中**每一个** dataset `<D>`，必须在 `behavior.actions` 中至少生成以下 2 个 query action（`kind: query`）：
+
+| Action id | operation | 语义 | input_schema 必填 |
+|---|---|---|---|
+| `<D>/get_by_id` | `read` | 按主键单条读取 | dataset 的 `primary_key` 字段 |
+| `<D>/list` | `list` | 分页 + 维度过滤列表 | `page` / `page_size` + 常用过滤维度 |
+
+可选但推荐再补：
+
+- `<D>/search`（`operation: search`）：当 dataset 有名称/编码/描述类字段时，提供关键字检索（输入 `q: string`，可选 `top_k`）。
+- `<D>/count`（`operation: aggregate`）：按某维度聚合计数；当业务问答里频繁出现「有多少 X」时补上。
+
+**每个 action 必须满足：**
+- `kind: query`、`entity_name: <D>`、`applies_to: { entity: dataset, dataset: <D> }`
+- `io_schema.input_schema` **必须**写出来（`additionalProperties: false` + `required` + `properties`），便于 Agent 调用与工具调度
+- `labels` 至少包含 `[query]`，加上业务标签（如 `[query, master_data]`、`[query, transactional]`）
+- `name` 用中文短名（如 "按ID查询采购订单"、"分页列出供应商"）
+
+**示例（以 `purchase_orders` 为例）**：
+
+```yaml
+behavior:
+  actions:
+    - id: purchase_orders/get_by_id
+      name: 按ID查询采购订单
+      kind: query
+      operation: read
+      entity_name: purchase_orders
+      applies_to: { entity: dataset, dataset: purchase_orders }
+      io_schema:
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [purchase_order_id]
+          properties:
+            purchase_order_id: { type: string }
+      labels: [query, transactional]
+
+    - id: purchase_orders/list
+      name: 分页列出采购订单
+      kind: query
+      operation: list
+      entity_name: purchase_orders
+      applies_to: { entity: dataset, dataset: purchase_orders }
+      io_schema:
+        input_schema:
+          type: object
+          additionalProperties: false
+          properties:
+            page: { type: integer, minimum: 1, default: 1 }
+            page_size: { type: integer, minimum: 1, maximum: 200, default: 50 }
+            supplier_id: { type: string }
+            status: { type: string }
+            date_from: { type: string, format: date }
+            date_to: { type: string, format: date }
+      labels: [query, transactional]
+```
+
+**6.3.2 业务查询 = Action（不是 metric、也不是 prompt 注释）**
+
+任何「带过滤条件 / 多维聚合 / 排名 / 趋势 / 对比 / 假设性问答」的业务查询，**都要落成一个 query action**，而不是只在 `ai_context.examples` 里堆自然语言示例。原则：
+
+- 命名空间：业务查询放在 `analytics/...`、`reports/...`、`<domain>/...` 下（不要塞进 dataset CRUD 命名空间）
+- `kind: query`，`operation` 用语义化动词：`aggregate` / `rank` / `trend` / `compare` / `forecast` / `breakdown` / `attribution`
+- `entity_name`：填该查询的**主返回粒度** dataset（即结果集每行代表什么）
+- `applies_to`：明确 `dataset` 或 `metric`；若该查询主要复用某指标，建议加 `applies_to.metric: <metric_name>`，方便归因
+- `io_schema.input_schema`：把过滤维度、时间窗口、分组字段都显式声明
+- `io_schema.output_schema`（推荐）：声明返回行的结构，提升 tool-use 可靠性
+
+**示例：**
+
+```yaml
+- id: analytics/top_suppliers_by_spend
+  name: 按采购金额排名 Top 供应商
+  kind: query
+  operation: rank
+  entity_name: suppliers
+  description: 在指定时间窗口内，按 PO 总金额对供应商降序排名，支持按物料分类筛选。
+  applies_to:
+    metric: total_purchase_order_amount
+    dataset: purchase_orders
+  io_schema:
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [date_from, date_to]
+      properties:
+        date_from: { type: string, format: date }
+        date_to: { type: string, format: date }
+        material_category: { type: string }
+        top_n: { type: integer, minimum: 1, maximum: 100, default: 10 }
+    output_schema:
+      type: object
+      additionalProperties: true
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              supplier_id: { type: string }
+              supplier_name: { type: string }
+              total_amount: { type: number }
+              po_count: { type: integer }
+  labels: [query, analytics, ranking]
+```
+
+**6.3.3 生成检查清单（Skill 自检，必须全过）**
+
+在 Step 7 跑 validate.py 之前，先自检：
+
+- [ ] `datasets[]` 中**每一个** dataset 都有至少 `<D>/get_by_id` + `<D>/list` 两个 action
+- [ ] 所有 query action 都写了 `io_schema.input_schema`（含 `additionalProperties: false`）
+- [ ] `ai_context.examples` 里出现的每个**业务问答**，都能映射到一个 `analytics/...` 或 `<domain>/...` 的 query action（如果映射不上，要么补 action，要么删掉那条 example）
+- [ ] 命令类 action（`kind: command`）不要混在 `analytics/*` 命名空间下
+- [ ] 每个 action 的 `labels` 至少含一个分类标签（`query` / `command` / `analytics` / `master_data` / `transactional` …）
+
+> 这条规则的目标：让 behavior.actions 成为 Agent 的「能力清单」——既覆盖底层数据访问（CRUD-Read），也覆盖业务级问答（analytics），不留隐式能力。
+
+---
+
+#### 6.4 Palantir 风格“任务/争议/告警”闭环如何落到 behavior（速用模板）
 
 当场景是“监控 KPI 异常 → 生成待办/任务 → 分派 → 处置 → 回写结果”（典型如智能任务管理、争议处理、KPI 标准化驱动行动项）时，优先采用以下 action 目录（可按需裁剪）：
 
